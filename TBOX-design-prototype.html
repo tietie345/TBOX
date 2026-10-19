@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TBOX 交互设计原型 V0.3</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Helvetica Neue",sans-serif;background:#0d0d14;color:#fff;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+
+/* 导航 */
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(13,13,20,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,0.06);padding:0 20px;display:flex;align-items:center;height:44px;gap:2px;overflow-x:auto}
+.nav-title{font-size:13px;font-weight:600;margin-right:18px;white-space:nowrap;color:#fff;display:flex;align-items:center;gap:6px}
+.nav-tab{padding:5px 12px;border-radius:5px;font-size:11px;cursor:pointer;border:none;background:transparent;color:rgba(255,255,255,0.4);transition:all .15s;white-space:nowrap;font-family:inherit}
+.nav-tab:hover{color:#fff;background:rgba(255,255,255,0.07)}
+.nav-tab.active{color:#2f80ed;background:rgba(47,128,237,0.12)}
+
+.page{display:none;padding:64px 32px 48px;min-height:100vh}
+.page.active{display:block}
+
+.state-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(47,128,237,0.1);border:1px solid rgba(47,128,237,0.2);border-radius:12px;font-size:11px;color:#4d9fff;margin-bottom:8px;font-weight:500;letter-spacing:.2px}
+.state-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:#2f80ed;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.desc{color:rgba(255,255,255,0.45);font-size:12px;margin-bottom:16px;max-width:680px;line-height:1.7}
+.desc b{color:rgba(255,255,255,0.85);font-weight:500}
+
+.screen{width:820px;max-width:100%;border-radius:8px;overflow:hidden;box-shadow:0 16px 60px rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.05);flex-shrink:0}
+.menubar{height:24px;background:#000;display:flex;align-items:center;padding:0 10px;gap:12px;font-size:11px;color:rgba(255,255,255,0.7)}
+.menubar .apple{font-size:12px}
+.menubar .tray-ic{margin-left:auto;cursor:pointer;padding:1px 5px;border-radius:3px;font-size:12px}
+.menubar .tray-ic:hover{background:rgba(255,255,255,0.15)}
+
+.desktop{height:480px;position:relative;overflow:hidden}
+.desktop img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:brightness(.85)}
+.dim-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:5}
+.fade-overlay{position:absolute;inset:0;background:rgba(0,0,0,0.25);z-index:5}
+
+/* 选区 */
+.sel-box{position:absolute;z-index:20;border:1.5px solid #2f80ed;cursor:crosshair}
+.sel-box::before{content:'';position:absolute;inset:-1px;border:1px solid rgba(47,128,237,0.3);pointer-events:none}
+.sel-corner{position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid #2f80ed;border-radius:50%;z-index:22}
+.sel-corner.tl{top:-4px;left:-4px;cursor:nwse-resize}
+.sel-corner.tr{top:-4px;right:-4px;cursor:nesw-resize}
+.sel-corner.bl{bottom:-4px;left:-4px;cursor:nesw-resize}
+.sel-corner.br{bottom:-4px;right:-4px;cursor:nwse-resize}
+
+/* 选区顶部信息条（白色） */
+.sel-info{position:absolute;z-index:25;display:flex;align-items:center;gap:10px;background:#fff;border-radius:6px;padding:4px 12px;box-shadow:0 2px 12px rgba(0,0,0,0.15);font-size:12px;color:#333;white-space:nowrap}
+.sel-info .dim{font-family:"SF Mono",Menlo,monospace;font-size:11px;color:#555;min-width:60px}
+.sel-info label{display:flex;align-items:center;gap:4px;font-size:11px;color:#666;cursor:pointer}
+.sel-info input[type=range]{width:50px;height:3px;-webkit-appearance:none;background:#ddd;border-radius:2px;outline:none}
+.sel-info input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:#2f80ed;border-radius:50%;cursor:pointer}
+.sel-info input[type=checkbox]{width:13px;height:13px;accent-color:#2f80ed;cursor:pointer}
+.sel-info .sep{width:1px;height:14px;background:#e0e0e0}
+.sel-info .val{font-family:"SF Mono",monospace;font-size:11px;color:#555;min-width:20px;text-align:center}
+
+/* 工具栏 - 白色胶囊 */
+.tb{position:absolute;z-index:25;background:#fff;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.18),0 1px 3px rgba(0,0,0,0.1);display:flex;align-items:center;padding:3px;user-select:none}
+.tb-btn{width:36px;height:32px;border:none;background:transparent;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .12s;color:#555;position:relative}
+.tb-btn:hover{background:#f0f4ff;color:#2f80ed}
+.tb-btn.on{background:#2f80ed;color:#fff}
+.tb-btn.on svg{stroke:#fff;fill:none}
+.tb-btn svg{width:18px;height:18px;stroke:#555;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:stroke .12s}
+.tb-btn:hover svg{stroke:#2f80ed}
+.tb-btn .tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.82);color:#fff;font-size:10px;padding:3px 8px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s;font-weight:400}
+.tb-btn:hover .tip{opacity:1}
+.tb-sep{width:1px;height:18px;background:#e8e8e8;margin:0 3px}
+
+/* 第二行：颜色+粗细 */
+.color-row{display:flex;align-items:center;gap:4px;padding:2px 4px}
+.color-dot{width:18px;height:18px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .12s}
+.color-dot:hover{transform:scale(1.15)}
+.color-dot.on{border-color:#2f80ed}
+.color-dot.custom{background:conic-gradient(red,yellow,lime,aqua,blue,magenta,red);display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:bold}
+.thick-row{display:flex;align-items:center;gap:3px;padding:0 4px}
+.thick-btn{width:22px;height:24px;display:flex;align-items:center;justify-content:center;border-radius:3px;cursor:pointer;transition:all .12s}
+.thick-btn:hover{background:#f0f4ff}
+.thick-btn.on{background:#edf3ff}
+.thick-line{background:#333;border-radius:1px}
+.thick-line.s{width:14px;height:2px}
+.thick-line.m{width:14px;height:3.5px}
+.thick-line.l{width:14px;height:6px}
+
+/* 放大镜 */
+.mag{position:absolute;width:110px;height:110px;border-radius:50%;border:3px solid #fff;box-shadow:0 4px 20px rgba(0,0,0,0.4);z-index:30;overflow:hidden;pointer-events:none}
+.mag::before,.mag::after{content:'';position:absolute;z-index:2;pointer-events:none}
+.mag::before{width:1px;height:100%;left:50%;transform:translateX(-50%);background:rgba(255,80,80,0.7)}
+.mag::after{height:1px;width:100%;top:50%;transform:translateY(-50%);background:rgba(255,80,80,0.7)}
+.mag-coord{position:absolute;bottom:-22px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;font-size:10px;padding:2px 8px;border-radius:4px;font-family:"SF Mono",monospace;white-space:nowrap}
+
+/* 窗口高亮 */
+.win-hl{position:absolute;border:1.5px solid #2f80ed;background:rgba(47,128,237,0.06);z-index:15;border-radius:4px;pointer-events:none;box-shadow:0 0 20px rgba(47,128,237,0.15)}
+
+/* 标注元素 */
+.a-rect{position:absolute;border:2.5px solid #ff3b30;z-index:22;border-radius:1px}
+.a-arrow{position:absolute;z-index:22;overflow:visible}
+.a-text{position:absolute;z-index:22}
+.a-text textarea{background:rgba(255,235,59,0.92);border:none;outline:none;padding:3px 6px;font-size:13px;font-weight:500;color:#222;border-radius:2px;resize:none;font-family:inherit;min-width:80px}
+.a-hl{position:absolute;background:rgba(255,200,0,0.35);z-index:22;border-radius:1px}
+.a-num{position:absolute;width:22px;height:22px;background:#ff3b30;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;z-index:22;box-shadow:0 2px 6px rgba(0,0,0,0.25);font-family:"SF Pro Display",sans-serif}
+.a-mosaic{position:absolute;z-index:22;background-image:linear-gradient(45deg,#777 25%,transparent 25%),linear-gradient(-45deg,#777 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#777 75%),linear-gradient(-45deg,transparent 75%,#777 75%);background-size:6px 6px;background-position:0 0,0 3px,3px -3px,-3px 0px;background-color:#555;border-radius:1px}
+.a-sel{box-shadow:0 0 0 1.5px #2f80ed,0 0 0 3px rgba(47,128,237,0.3)}
+.a-handle{position:absolute;width:7px;height:7px;background:#fff;border:1.5px solid #2f80ed;border-radius:50%;z-index:23;cursor:pointer}
+
+/* 贴图 */
+.pin-win{position:absolute;background:#fff;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,0.3);z-index:50;overflow:hidden;cursor:move;border:1px solid rgba(0,0,0,0.08)}
+.pin-hdr{height:20px;background:#fafafa;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa;border-bottom:1px solid #eee;gap:3px}
+.pin-body{padding:10px;color:#333;font-size:11px;line-height:1.5}
+
+/* 录屏条 */
+.rec-bar{position:absolute;top:32px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:4px 12px 4px 14px;background:rgba(0,0,0,0.75);backdrop-filter:blur(20px);border-radius:16px;z-index:25}
+.rec-dot{width:7px;height:7px;background:#ff3b30;border-radius:50%;animation:recPulse 1s infinite}
+@keyframes recPulse{0%,100%{opacity:1}50%{opacity:.3}}
+.rec-time{font-size:11px;font-family:"SF Mono",monospace;color:#fff;min-width:38px}
+.rec-sep{width:1px;height:14px;background:rgba(255,255,255,0.2)}
+.rec-btn{width:24px;height:24px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:transparent;color:rgba(255,255,255,0.8);transition:all .12s;padding:0}
+.rec-btn:hover{background:rgba(255,255,255,0.15);color:#fff}
+.rec-btn.stop{background:#ff3b30;color:#fff;width:22px;height:22px;margin:0 2px}
+.rec-btn svg{width:12px;height:12px;fill:currentColor}
+
+/* 翻译浮层 */
+.trans-pop{position:absolute;background:rgba(0,0,0,0.85);color:#fff;padding:10px 14px;border-radius:7px;font-size:12px;z-index:35;max-width:340px;line-height:1.6;box-shadow:0 4px 20px rgba(0,0,0,0.3);backdrop-filter:blur(10px)}
+.trans-pop .ori{color:rgba(255,255,255,0.4);font-size:11px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1)}
+.trans-act{margin-top:8px;display:flex;gap:6px}
+.trans-act button{padding:3px 10px;background:rgba(255,255,255,0.12);border:none;border-radius:4px;color:#fff;font-size:10px;cursor:pointer}
+.trans-act button:hover{background:rgba(255,255,255,0.2)}
+
+/* 复制成功 */
+.toast-ok{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(52,199,89,0.92);color:#fff;padding:8px 20px;border-radius:8px;font-size:12px;z-index:40;display:flex;align-items:center;gap:6px;box-shadow:0 6px 24px rgba(0,0,0,0.3);animation:toastIn .3s ease;font-weight:500}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,-50%) scale(.9)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.thumb-preview{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;border-radius:6px;z-index:35;overflow:hidden;border:2px solid rgba(255,255,255,0.3);animation:thumbFade 1.8s ease forwards;box-shadow:0 8px 30px rgba(0,0,0,0.4)}
+.thumb-inner{height:120px;background:linear-gradient(135deg,#5b8fd9,#3a6bc0);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.8);font-size:13px}
+.thumb-check{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(52,199,89,0.85);color:#fff;font-size:28px;animation:checkIn .4s ease .6s both}
+@keyframes checkIn{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+@keyframes thumbFade{0%{opacity:0;transform:translate(-50%,-50%) scale(.92)}15%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-58%) scale(.92)}}
+
+/* 托盘菜单 */
+.tray-menu{position:absolute;top:28px;right:6px;background:rgba(40,40,55,0.96);backdrop-filter:blur(20px);border-radius:8px;border:1px solid rgba(255,255,255,0.08);padding:4px;min-width:175px;z-index:200;box-shadow:0 8px 32px rgba(0,0,0,0.5);display:none}
+.tray-menu.show{display:block}
+.tray-item{padding:6px 11px;font-size:11px;color:rgba(255,255,255,0.7);border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:7px}
+.tray-item:hover{background:rgba(255,255,255,0.08);color:#fff}
+.tray-sep{height:1px;background:rgba(255,255,255,0.06);margin:3px 0}
+.tray-k{margin-left:auto;font-size:10px;color:rgba(255,255,255,0.25);font-family:"SF Mono",monospace}
+
+/* 设置窗口 */
+.set-win{width:740px;max-width:100%;height:440px;background:#1e1e30;border-radius:8px;overflow:hidden;box-shadow:0 16px 60px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.06);display:flex}
+.set-side{width:170px;background:rgba(0,0,0,0.15);padding:8px 0;border-right:1px solid rgba(255,255,255,0.04);overflow-y:auto}
+.set-sec{padding:10px 14px 4px;font-size:10px;color:rgba(255,255,255,0.25);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.set-item{padding:7px 14px;font-size:11px;color:rgba(255,255,255,0.5);cursor:pointer;display:flex;align-items:center;gap:7px;transition:all .12s}
+.set-item:hover{color:#fff;background:rgba(255,255,255,0.04)}
+.set-item.on{color:#2f80ed;background:rgba(47,128,237,0.1)}
+.set-body{flex:1;padding:24px 28px;overflow-y:auto}
+.set-body h2{font-size:16px;font-weight:600;margin-bottom:18px}
+.set-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.set-row .sl{font-size:11px}
+.set-row .sd{font-size:10px;color:rgba(255,255,255,0.3);margin-top:1px}
+.toggle{width:36px;height:20px;background:#3a3a55;border-radius:10px;position:relative;cursor:pointer;transition:all .2s;flex-shrink:0}
+.toggle.on{background:#2f80ed}
+.toggle::after{content:'';position:absolute;width:16px;height:16px;background:#fff;border-radius:50%;top:2px;left:2px;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
+.toggle.on::after{left:18px}
+.hk-box{padding:3px 12px;background:rgba(255,255,255,0.06);border:1px dashed rgba(255,255,255,0.15);border-radius:4px;font-size:11px;font-family:"SF Mono",monospace;cursor:pointer;min-width:60px;text-align:center;color:rgba(255,255,255,0.7)}
+
+.note-box{margin-top:14px;padding:10px 14px;background:rgba(47,128,237,0.05);border-radius:7px;border-left:2.5px solid #2f80ed;max-width:820px}
+.note-t{font-size:11px;font-weight:600;color:#4d9fff;margin-bottom:3px}
+.note-d{font-size:11px;color:rgba(255,255,255,0.4);line-height:1.7}
+.note-d b{color:rgba(255,255,255,0.8);font-weight:500}
+.note-d code{background:rgba(255,255,255,0.07);padding:1px 5px;border-radius:3px;font-size:10px;font-family:"SF Mono",monospace}
+
+.sc-row{margin-top:10px;display:flex;gap:12px;flex-wrap:wrap}
+.sc{display:flex;align-items:center;gap:4px;font-size:10px;color:rgba(255,255,255,0.3)}
+.sc-k{padding:1px 6px;background:rgba(255,255,255,0.07);border-radius:3px;font-family:"SF Mono",monospace;font-size:10px;color:rgba(255,255,255,0.5)}
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-title">🔨 TBOX 原型</div>
+  <button class="nav-tab active" onclick="go('idle',event)">① 待机</button>
+  <button class="nav-tab" onclick="go('cap',event)">② 框选</button>
+  <button class="nav-tab" onclick="go('detect',event)">③ 窗口吸附</button>
+  <button class="nav-tab" onclick="go('copy',event)">④ 复制完成</button>
+  <button class="nav-tab" onclick="go('anno',event)">⑤ 标注模式</button>
+  <button class="nav-tab" onclick="go('pin',event)">⑥ 贴图</button>
+  <button class="nav-tab" onclick="go('trans',event)">⑦ 翻译</button>
+  <button class="nav-tab" onclick="go('rec',event)">⑧ 录屏</button>
+  <button class="nav-tab" onclick="go('set',event)">⑨ 设置</button>
+</div>
+
+<!-- ① 待机 -->
+<div class="page active" id="p-idle">
+  <div class="state-badge">Idle · 托盘待机</div>
+  <div class="desc">应用常驻<b>菜单栏右上角</b>，不在 Dock 显示。按 <b>⇧Z</b> 唤起截图。点击托盘图标弹出菜单。</div>
+  <div class="screen">
+    <div class="menubar">
+      <span class="apple"></span><span>Finder</span><span>文件</span><span>编辑</span><span>视图</span>
+      <span class="tray-ic" onclick="document.getElementById('tm').classList.toggle('show')">🔨</span>
+      <span>🔋</span><span>🔊</span><span>📶</span><span>9:41</span>
+    </div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="tray-menu" id="tm">
+        <div class="tray-item">📸 区域截图 <span class="tray-k">⇧Z</span></div>
+        <div class="tray-item">🪟 窗口截图 <span class="tray-k">⇧⌘Z</span></div>
+        <div class="tray-item">📺 全屏截图 <span class="tray-k">⌃⇧Z</span></div>
+        <div class="tray-sep"></div>
+        <div class="tray-item" onclick="go('set')">⚙️ 偏好设置...</div>
+        <div class="tray-item" onclick="go('set')">👤 账户</div>
+        <div class="tray-item" onclick="go('set')">💎 订阅</div>
+        <div class="tray-sep"></div>
+        <div class="tray-item">📖 帮助</div>
+        <div class="tray-item">ℹ️ 关于</div>
+        <div class="tray-sep"></div>
+        <div class="tray-item" style="color:#ff6b6b">退出 <span class="tray-k">⌘Q</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="note-box">
+    <div class="note-t">设计说明</div>
+    <div class="note-d">LSUIElement 菜单栏应用，Dock 无图标。托盘菜单提供截图/设置/账户/退出入口。主窗口通过托盘菜单打开时才显示 Dock 图标。</div>
+  </div>
+</div>
+
+<!-- ② 框选 -->
+<div class="page" id="p-cap">
+  <div class="state-badge">Capturing · 区域框选</div>
+  <div class="desc">按 <b>⇧Z</b> &lt;100ms 弹出遮罩。拖拽框选，<b>选区顶部白色信息条</b>显示尺寸/圆角/阴影。<b>右下角白色胶囊工具栏</b>平铺主功能按钮。<b>不点按钮松手 = 默认复制</b>。</div>
+  <div class="screen">
+    <div class="menubar"><span class="apple"></span><span>Finder</span><span style="margin-left:auto">9:41</span></div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="dim-overlay"></div>
+      <div class="sel-box" style="left:180px;top:110px;width:420px;height:250px">
+        <div class="sel-corner tl"></div><div class="sel-corner tr"></div><div class="sel-corner bl"></div><div class="sel-corner br"></div>
+      </div>
+      <!-- 顶部信息条 -->
+      <div class="sel-info" style="left:180px;top:88px">
+        <span class="dim">420 × 250</span>
+        <div class="sep"></div>
+        <label>圆角 <input type="range" min="0" max="20" value="0"></label>
+        <div class="sep"></div>
+        <span class="val">0</span>
+        <div class="sep"></div>
+        <label><input type="checkbox"> 阴影</label>
+      </div>
+      <!-- 放大镜 -->
+      <div class="mag" style="left:620px;top:140px">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,#6a9fd8,#4a7fb8);display:flex;align-items:center;justify-content:center;font-size:9px;color:rgba(255,255,255,0.4)">像素</div>
+        <div class="mag-coord">RGB(75,130,200)</div>
+      </div>
+      <!-- 右下角工具栏 -->
+      <div class="tb" style="left:346px;top:370px">
+        <button class="tb-btn" onclick="go('anno',event)">
+          <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          <span class="tip">标注</span>
+        </button>
+        <button class="tb-btn">
+          <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/><line x1="4" y1="20" x2="20" y2="4" stroke-dasharray="2,2"/></svg>
+          <span class="tip">画笔</span>
+        </button>
+        <button class="tb-btn">
+          <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          <span class="tip">文字</span>
+        </button>
+        <button class="tb-btn" onclick="go('rec',event)">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#ff3b30" stroke="none"/></svg>
+          <span class="tip">录屏</span>
+        </button>
+        <button class="tb-btn" onclick="go('trans',event)">
+          <svg viewBox="0 0 24 24"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+          <span class="tip">翻译</span>
+        </button>
+        <button class="tb-btn" onclick="go('pin',event)">
+          <svg viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z" stroke-width="1.5"/></svg>
+          <span class="tip">贴图</span>
+        </button>
+        <div class="tb-sep"></div>
+        <button class="tb-btn">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span class="tip">下载</span>
+        </button>
+        <button class="tb-btn" onclick="go('copy',event)" style="color:#2f80ed">
+          <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#2f80ed" stroke-width="2.5"/></svg>
+          <span class="tip">复制 ✓</span>
+        </button>
+        <button class="tb-btn">
+          <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <span class="tip">取消 ✕</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="note-box">
+    <div class="note-t">工具栏布局</div>
+    <div class="note-d"><b>位置</b>：选区右下角外侧，白色胶囊圆角矩形。<b>风格</b>：线性SVG图标(1.8px描边)，hover背景淡蓝(#f0f4ff)图标变蓝(#2f80ed)，选中蓝底白图标。<b>主功能平铺一行</b>：标注/画笔/文字/录屏/翻译/贴图 分隔线后是 下载/✓/×。<b>顶部信息条</b>：白色浮在选区上方，显示尺寸+圆角滑块+阴影勾选。<b>松手默认 = 复制</b>，相当于点✓。</div>
+  </div>
+  <div class="sc-row">
+    <div class="sc">复制 <span class="sc-k">Enter / 松手 / ✓</span></div>
+    <div class="sc">保存 <span class="sc-k">⌘S</span></div>
+    <div class="sc">取消 <span class="sc-k">Esc / ×</span></div>
+  </div>
+</div>
+
+<!-- ③ 窗口吸附 -->
+<div class="page" id="p-detect">
+  <div class="state-badge">Capturing · 智能窗口吸附</div>
+  <div class="desc">鼠标悬停窗口时<b>蓝色边框自动高亮</b>，点击选中整个窗口。选区靠近窗口边缘 5px 自动吸附。</div>
+  <div class="screen">
+    <div class="menubar"><span class="apple"></span><span>Finder</span><span style="margin-left:auto">9:41</span></div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="dim-overlay"></div>
+      <div class="win-hl" style="left:120px;top:80px;width:460px;height:300px"></div>
+      <div class="sel-box" style="left:116px;top:76px;width:468px;height:308px;border-style:dashed;border-color:rgba(47,128,237,0.5)">
+        <div class="sel-corner tl"></div><div class="sel-corner tr"></div><div class="sel-corner bl"></div><div class="sel-corner br"></div>
+      </div>
+      <div class="sel-info" style="left:116px;top:54px">
+        <span class="dim">468 × 308</span>
+        <div class="sep"></div>
+        <label style="color:#2f80ed;font-weight:500">🪟 Safari</label>
+      </div>
+      <div class="tb" style="left:330px;top:392px">
+        <button class="tb-btn" onclick="go('anno',event)"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg><span class="tip">标注</span></button>
+        <button class="tb-btn" onclick="go('rec',event)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="#ff3b30" stroke="none"/></svg><span class="tip">录屏</span></button>
+        <button class="tb-btn" onclick="go('trans',event)"><svg viewBox="0 0 24 24"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg><span class="tip">翻译</span></button>
+        <button class="tb-btn" onclick="go('pin',event)"><svg viewBox="0 0 24 24"><path d="M12 2l2 7h7l-5.5 4 2 7L12 16l-5.5 4 2-7L3 9h7z" stroke-width="1.5"/></svg><span class="tip">贴图</span></button>
+        <div class="tb-sep"></div>
+        <button class="tb-btn"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span class="tip">下载</span></button>
+        <button class="tb-btn" onclick="go('copy',event)" style="color:#2f80ed"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#2f80ed" stroke-width="2.5"/></svg><span class="tip">复制</span></button>
+        <button class="tb-btn"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span class="tip">取消</span></button>
+      </div>
+    </div>
+  </div>
+  <div class="note-box">
+    <div class="note-t">窗口检测</div>
+    <div class="note-d"><code>SCShareableContent</code> 获取窗口列表，悬停自动蓝色高亮+显示窗口名称。窗口截图自动添加阴影(可在顶部信息条取消)。</div>
+  </div>
+</div>
+
+<!-- ④ 复制完成 -->
+<div class="page" id="p-copy">
+  <div class="state-badge">Copying · 复制完成</div>
+  <div class="desc">松开鼠标 &lt;50ms 裁剪写入剪贴板。中央闪<b>缩略图+✓</b>(~1.5秒)，遮罩消失回到待机。</div>
+  <div class="screen">
+    <div class="menubar"><span class="apple"></span><span>Finder</span><span style="margin-left:auto">9:41</span></div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="fade-overlay"></div>
+      <div class="thumb-preview">
+        <div class="thumb-inner">截图预览</div>
+        <div class="thumb-check">✓</div>
+      </div>
+      <div class="toast-ok">✓ 已复制到剪贴板</div>
+    </div>
+  </div>
+  <div class="sc-row">
+    <div class="sc">保存 <span class="sc-k">⌘S</span></div>
+    <div class="sc">1.5秒后自动回到待机</div>
+  </div>
+</div>
+
+<!-- ⑤ 标注模式 -->
+<div class="page" id="p-anno">
+  <div class="state-badge">Annotating · 标注模式</div>
+  <div class="desc">点「标注」进入。工具栏<b>居中显示在选区下方</b>，<b>第一行</b>平铺标注工具+操作按钮，<b>第二行</b>内联展开颜色+粗细属性。</div>
+  <div class="screen">
+    <div class="menubar"><span class="apple"></span><span>Finder</span><span style="margin-left:auto">9:41</span></div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="dim-overlay"></div>
+      <!-- 标注画布 -->
+      <div class="sel-box" style="left:110px;top:45px;width:600px;height:300px;background:#fff;border-color:#2f80ed;box-shadow:0 0 0 9999px rgba(0,0,0,0.6)">
+        <div class="sel-corner tl"></div><div class="sel-corner tr"></div><div class="sel-corner bl"></div><div class="sel-corner br"></div>
+        <div style="position:absolute;inset:0;padding:18px;color:#333;font-size:12px;line-height:1.7;overflow:hidden">
+          <h3 style="font-size:15px;margin-bottom:8px;color:#222">TBOX 项目报告</h3>
+          <p>这是一段需要标注的文本内容。</p>
+          <p style="margin-top:4px">重要数据需要高亮或画框标记。</p>
+          <p style="margin-top:4px">支持多种标注工具，全部可二次编辑。</p>
+          <div style="margin-top:36px;padding:8px;background:#f5f5f5;border-radius:3px;font-size:11px;color:#999">敏感信息区域</div>
+        </div>
+        <!-- 标注元素 -->
+        <div class="a-rect a-sel" style="left:18px;top:44px;width:155px;height:22px"></div>
+        <div class="a-handle" style="left:11px;top:37px"></div>
+        <div class="a-handle" style="left:169px;top:37px"></div>
+        <div class="a-handle" style="left:11px;top:63px"></div>
+        <div class="a-handle" style="left:169px;top:63px"></div>
+        <svg class="a-arrow" style="left:180px;top:80px;width:70px;height:35px" viewBox="0 0 70 35">
+          <line x1="8" y1="28" x2="55" y2="8" stroke="#ff3b30" stroke-width="2.5" stroke-linecap="round"/>
+          <polygon points="55,8 48,12 52,5" fill="#ff3b30"/>
+        </svg>
+        <div class="a-text" style="left:205px;top:48px"><textarea readonly rows="1">注意这里</textarea></div>
+        <div class="a-hl" style="left:18px;top:82px;width:190px;height:18px"></div>
+        <div class="a-num" style="left:560px;top:44px">1</div>
+        <div class="a-mosaic" style="left:18px;top:170px;width:145px;height:22px"></div>
+      </div>
+      <!-- 双层工具栏：选区下方居中 -->
+      <div style="position:absolute;left:110px;top:352px;z-index:25;display:flex;flex-direction:column;align-items:center;gap:3px">
+        <!-- 第一行：工具 -->
+        <div class="tb" style="position:static">
+          <button class="tb-btn on">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            <span class="tip">矩形</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="5,5 19,5 19,19"/></svg>
+            <span class="tip">箭头</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+            <span class="tip">画笔</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+            <span class="tip">文字</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            <span class="tip">马赛克</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><text x="12" y="16" text-anchor="middle" font-size="11" fill="currentColor" stroke="none" font-weight="bold">1</text></svg>
+            <span class="tip">序号</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+            <span class="tip">高亮</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+            <span class="tip">模糊</span>
+          </button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            <span class="tip">撤销</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+            <span class="tip">重做</span>
+          </button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <span class="tip">下载</span>
+          </button>
+          <button class="tb-btn" style="color:#2f80ed">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#2f80ed" stroke-width="2.5"/></svg>
+            <span class="tip">完成</span>
+          </button>
+          <button class="tb-btn">
+            <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <span class="tip">取消</span>
+          </button>
+        </div>
+        <!-- 第二行：颜色+粗细 -->
+        <div class="tb" style="position:static;padding:4px 6px">
+          <div class="color-row">
+            <div class="color-dot on" style="background:#ff3b30"></div>
+            <div class="color-dot" style="background:#ff9500"></div>
+            <div class="color-dot" style="background:#ffcc00"></div>
+            <div class="color-dot" style="background:#34c759"></div>
+            <div class="color-dot" style="background:#2f80ed"></div>
+            <div class="color-dot" style="background:#af52de"></div>
+            <div class="color-dot" style="background:#ff2d55"></div>
+            <div class="color-dot" style="background:#fff;border:2px solid #ddd"></div>
+            <div class="color-dot" style="background:#1d1d1f"></div>
+            <div class="color-dot custom">+</div>
+          </div>
+          <div class="tb-sep" style="height:22px"></div>
+          <div class="thick-row">
+            <div class="thick-btn"><div class="thick-line s"></div></div>
+            <div class="thick-btn on"><div class="thick-line m"></div></div>
+            <div class="thick-btn"><div class="thick-line l"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note-box">
+    <div class="note-t">标注工具栏布局（参考 iShot 风格）</div>
+    <div class="note-d"><b>双层结构</b>：选区下方居中，两个白色胶囊上下堆叠。<b>第一行</b>：矩形/箭头/画笔/文字/马赛克/序号/高亮/模糊 | 撤销/重做 | 下载/✓/×。<b>第二行</b>：颜色圆点(8色+黑白+自定义)+3档粗细，仅在选中需要颜色的工具时出现（选马赛克/模糊/文字时不显示）。选中元素显示蓝色控制点，可拖拽编辑/Delete删除。</div>
+  </div>
+  <div class="sc-row">
+    <div class="sc">完成 <span class="sc-k">Enter / ✓</span></div>
+    <div class="sc">保存 <span class="sc-k">⌘S</span></div>
+    <div class="sc">撤销 <span class="sc-k">⌘Z</span></div>
+    <div class="sc">删除 <span class="sc-k">Delete</span></div>
+    <div class="sc">取消 <span class="sc-k">Esc / ×</span></div>
+  </div>
+</div>
+
+<!-- ⑥ 贴图 -->
+<div class="page" id="p-pin">
+  <div class="state-badge">Pinning · 贴图窗口</div>
+  <div class="desc">截图<b>钉在屏幕最上层</b>，可拖动。<b>双击贴图 = 重新进入标注编辑</b>。右键菜单操作。</div>
+  <div class="screen">
+    <div class="menubar"><span class="apple"></span><span>Finder</span><span style="margin-left:auto">9:41</span></div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="pin-win" style="left:500px;top:60px;width:200px">
+        <div class="pin-hdr">📌 截图 · 可拖动</div>
+        <div class="pin-body"><p style="font-size:11px">贴图内容始终置顶</p><p style="font-size:10px;color:#999;margin-top:3px">双击可编辑</p></div>
+      </div>
+      <div class="pin-win" style="left:150px;top:270px;width:175px;border:2px solid #2f80ed;box-shadow:0 4px 20px rgba(47,128,237,0.3)">
+        <div class="pin-hdr" style="background:#eaf2ff;color:#2f80ed">📌 双击编辑</div>
+        <div class="pin-body"><p style="font-size:11px">双击进入标注模式</p><p style="font-size:10px;color:#2f80ed;margin-top:3px">标注完成后更新贴图</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="note-box">
+    <div class="note-t">贴图交互</div>
+    <div class="note-d">贴图窗口始终置顶(floating level)。<b>双击 = 重新标注</b>，编辑完更新贴图。右键菜单：关闭/复制/保存/重新标注。支持多个贴图同时存在。</div>
+  </div>
+</div>
+
+<!-- ⑦ 翻译 -->
+<div class="page" id="p-trans">
+  <div class="state-badge">Translating · 翻译浮层（阶段二）</div>
+  <div class="desc">Vision OCR 识别选区文字，翻译结果<b>半透明浮层贴回原位置</b>（打字幕效果），底部复制/朗读按钮。</div>
+  <div class="screen">
+    <div class="menubar"><span class="apple"></span><span>Finder</span><span style="margin-left:auto">9:41</span></div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="fade-overlay" style="background:rgba(0,0,0,0.2)"></div>
+      <div class="sel-box" style="left:80px;top:90px;width:460px;height:150px"></div>
+      <div class="trans-pop" style="left:80px;top:90px;width:460px">
+        <div>敏捷的棕色狐狸跳过懒狗。</div>
+        <div style="margin-top:4px">截图工具是提高生产力的必备工具。</div>
+        <div style="margin-top:4px">此功能提供实时翻译浮层。</div>
+        <div class="ori">The quick brown fox jumps over the lazy dog. Screen capture tools are essential...</div>
+        <div class="trans-act"><button>📋 复制</button><button>🔊 朗读</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑧ 录屏 -->
+<div class="page" id="p-rec">
+  <div class="state-badge">Recording · 录屏控制（阶段二）</div>
+  <div class="desc">录屏时顶部<b>胶囊控制条</b>，显示录制时长/暂停/画笔/麦克风/停止。选区虚线边框标识录制区域。</div>
+  <div class="screen">
+    <div class="menubar"><span class="apple"></span><span>Finder</span><span style="margin-left:auto">9:41</span></div>
+    <div class="desktop">
+      <img src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1200&q=80" alt="desktop">
+      <div class="rec-bar">
+        <div class="rec-dot"></div>
+        <div class="rec-time">00:23</div>
+        <div class="rec-sep"></div>
+        <button class="rec-btn"><svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg></button>
+        <button class="rec-btn"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+        <button class="rec-btn"><svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></button>
+        <div class="rec-sep"></div>
+        <button class="rec-btn stop"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
+      </div>
+      <div style="position:absolute;left:140px;top:90px;width:480px;height:290px;border:2px dashed #ff3b30;border-radius:4px;z-index:15">
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);font-size:13px">正在录制此区域</div>
+      </div>
+      <div style="position:absolute;left:300px;top:200px;width:24px;height:24px;border:3px solid rgba(255,59,48,0.5);border-radius:50%;z-index:20;animation:ripple 1.2s infinite"></div>
+    </div>
+  </div>
+  <style>@keyframes ripple{0%{transform:scale(.5);opacity:1}100%{transform:scale(2.2);opacity:0}}</style>
+</div>
+
+<!-- ⑨ 设置 -->
+<div class="page" id="p-set">
+  <div class="state-badge">Settings · 独立主窗口</div>
+  <div class="desc">从托盘菜单打开，Dock 显示图标。<b>左侧边栏导航</b>，承载通用/快捷键/账户/订阅。</div>
+  <div class="set-win">
+    <div class="set-side">
+      <div class="set-sec">设置</div>
+      <div class="set-item on" onclick="sb(this)">⚙️ 通用</div>
+      <div class="set-item" onclick="sb(this)">⌨️ 快捷键</div>
+      <div class="set-sec">账户</div>
+      <div class="set-item" onclick="sb(this)">👤 账户信息</div>
+      <div class="set-item" onclick="sb(this)">💎 订阅管理</div>
+      <div class="set-sec">其他</div>
+      <div class="set-item" onclick="sb(this)">📖 帮助</div>
+      <div class="set-item" onclick="sb(this)">ℹ️ 关于</div>
+    </div>
+    <div class="set-body">
+      <h2>通用设置</h2>
+      <div class="set-row">
+        <div><div class="sl">开机自启动</div><div class="sd">登录系统后自动运行</div></div>
+        <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div class="set-row">
+        <div><div class="sl">截图后自动复制</div><div class="sd">松开鼠标立即复制到剪贴板</div></div>
+        <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div class="set-row">
+        <div><div class="sl">截图格式</div><div class="sd">保存文件使用的格式</div></div>
+        <select style="padding:4px 8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:4px;color:#fff;font-size:11px">
+          <option>PNG</option><option>JPEG</option><option>TIFF</option>
+        </select>
+      </div>
+      <h2 style="margin-top:24px">快捷键</h2>
+      <div class="set-row">
+        <div><div class="sl">唤醒截图</div><div class="sd">全局快捷键</div></div>
+        <div class="hk-box">⇧Z</div>
+      </div>
+      <div class="set-row">
+        <div><div class="sl">冲突检测</div><div class="sd">检测到热键冲突时提示</div></div>
+        <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+      </div>
+    </div>
+  </div>
+  <div class="note-box">
+    <div class="note-t">主窗口设计</div>
+    <div class="note-d">独立 SwiftUI 主窗口，左侧边栏+右侧内容区。现阶段仅实现通用+快捷键设置，账户/订阅后期填充。主窗口关闭不退出 app。</div>
+  </div>
+</div>
+
+<script>
+function go(id,e){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('p-'+id).classList.add('active');
+  if(e) e.target.classList.add('active');
+  else { document.querySelectorAll('.nav-tab').forEach(t=>{if(t.textContent.includes(id==='cap'?'框选':id==='detect'?'吸附':id==='copy'?'复制':id==='anno'?'标注':id==='pin'?'贴图':id==='trans'?'翻译':id==='rec'?'录屏':id==='set'?'设置':'待机'))t.classList.add('active');});}
+  document.getElementById('tm')?.classList.remove('show');
+}
+function sb(el){
+  el.parentElement.querySelectorAll('.set-item').forEach(i=>i.classList.remove('on'));
+  el.classList.add('on');
+}
+// 颜色点交互
+document.querySelectorAll('.color-dot').forEach(d=>{
+  d.addEventListener('click',function(){
+    this.parentElement.querySelectorAll('.color-dot').forEach(c=>c.classList.remove('on'));
+    this.classList.add('on');
+  });
+});
+document.querySelectorAll('.thick-btn').forEach(b=>{
+  b.addEventListener('click',function(){
+    this.parentElement.querySelectorAll('.thick-btn').forEach(t=>t.classList.remove('on'));
+    this.classList.add('on');
+  });
+});
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.tray-ic')&&!e.target.closest('.tray-menu')) document.getElementById('tm')?.classList.remove('show');
+});
+</script>
+</body>
+</html>

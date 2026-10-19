@@ -1,0 +1,1066 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <title>TBOX 客户端</title>
+  <style>
+    :root {
+      --text: #1d1d1f;
+      --secondary: #6e6e73;
+      --tertiary: #98989d;
+      --line: #dedee2;
+      --line-light: #ededf0;
+      --sidebar: #f3f3f5;
+      --window: #ffffff;
+      --blue: #1769e0;
+      --blue-hover: #0d5bc8;
+      --blue-soft: #e9f1fd;
+      --green: #16834f;
+      --red: #c73636;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: #e8e8ea;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      font-size: 13px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid rgba(23,105,224,.35);
+      outline-offset: 2px;
+    }
+
+    .stage {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }
+
+    .app {
+      width: min(1000px, 100%);
+      height: min(680px, calc(100vh - 56px));
+      min-height: 600px;
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      grid-template-rows: 44px minmax(0, 1fr);
+      overflow: hidden;
+      border: 1px solid #bfc0c4;
+      background: var(--window);
+      box-shadow: 0 18px 46px rgba(0,0,0,.16);
+    }
+
+    .titlebar {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 140px 1fr 140px;
+      align-items: center;
+      border-bottom: 1px solid #d2d2d5;
+      background: #f7f7f8;
+      padding: 0 14px;
+      -webkit-app-region: drag;
+    }
+
+    .traffic { display: flex; gap: 8px; }
+    .traffic span { width: 11px; height: 11px; border-radius: 50%; }
+    .traffic span:nth-child(1) { background: #ff5f57; }
+    .traffic span:nth-child(2) { background: #febc2e; }
+    .traffic span:nth-child(3) { background: #28c840; }
+    .window-title { text-align: center; font-size: 12px; font-weight: 600; }
+    .service-inline {
+      justify-self: end;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--secondary);
+      font-size: 11px;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+
+    .sidebar {
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid #d7d7da;
+      background: var(--sidebar);
+      padding: 20px 0 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 17px 24px;
+    }
+    .brand-mark {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: #222327;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .brand-name { font-size: 13px; font-weight: 650; }
+    .brand-version { margin-top: 1px; color: var(--tertiary); font-size: 9px; }
+
+    .nav { display: grid; }
+    .nav-button {
+      position: relative;
+      width: 100%;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      padding: 0 18px;
+      color: #55565b;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }
+    .nav-button:hover { background: #e9e9ec; }
+    .nav-button.active {
+      color: #111216;
+      background: #e2e2e6;
+      font-weight: 600;
+    }
+    .nav-button.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 8px;
+      bottom: 8px;
+      width: 3px;
+      background: var(--blue);
+    }
+    .nav-icon {
+      width: 17px;
+      color: #57585d;
+      font: 600 13px/1 "SF Mono", Menlo, monospace;
+      text-align: center;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 14px 17px 0;
+      border-top: 1px solid #d7d7da;
+    }
+    .user {
+      display: grid;
+      grid-template-columns: 26px minmax(0,1fr);
+      gap: 8px;
+      align-items: center;
+    }
+    .avatar {
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: #515158;
+      font-size: 9px;
+      font-weight: 700;
+    }
+    .user-name { font-size: 11px; font-weight: 600; }
+    .user-plan { margin-top: 1px; color: var(--tertiary); font-size: 9px; }
+
+    .main { min-width: 0; min-height: 0; overflow: auto; background: #fff; }
+    .view {
+      display: none;
+      width: min(720px, calc(100% - 64px));
+      margin: 0 auto;
+      padding: 42px 0 60px;
+    }
+    .view.active { display: block; animation: show .16s ease; }
+    @keyframes show { from { opacity: .35; } to { opacity: 1; } }
+
+    .page-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 34px;
+    }
+    h1 { margin: 0; font-size: 20px; line-height: 1.25; font-weight: 650; letter-spacing: -.3px; }
+    .subtitle { margin: 6px 0 0; color: var(--secondary); font-size: 11px; line-height: 1.55; }
+
+    .button {
+      min-height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #bfc0c5;
+      border-radius: 0;
+      padding: 0 12px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 550;
+    }
+    .button:hover { background: #f3f3f5; }
+    .button.primary { color: #fff; border-color: var(--blue); background: var(--blue); }
+    .button.primary:hover { border-color: var(--blue-hover); background: var(--blue-hover); }
+    .button.text { min-height: auto; border: 0; padding: 0; color: var(--blue); background: transparent; }
+    .button.danger { color: var(--red); }
+
+    .section { margin-top: 34px; }
+    .section:first-of-type { margin-top: 0; }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid #cfd0d4;
+    }
+    .section-title { margin: 0; font-size: 12px; font-weight: 650; }
+    .section-note { color: var(--tertiary); font-size: 9px; }
+
+    .rows { border-bottom: 1px solid var(--line-light); }
+    .row {
+      min-height: 58px;
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      align-items: center;
+      gap: 22px;
+      border-bottom: 1px solid var(--line-light);
+      padding: 9px 0;
+    }
+    .row:last-child { border-bottom: 0; }
+    .row-title { font-size: 11px; font-weight: 580; }
+    .row-description { margin-top: 3px; color: var(--secondary); font-size: 9px; line-height: 1.45; }
+    .row-value { color: #424348; font-size: 10px; text-align: right; white-space: nowrap; }
+    .row-value.success { color: var(--green); }
+
+    .hero-status {
+      padding: 0 0 18px;
+      border-bottom: 1px solid #cfd0d4;
+    }
+    .hero-heading {
+      padding: 0 0 9px;
+      border-bottom: 1px solid #cfd0d4;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .hero-status-body {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      align-items: center;
+      gap: 28px;
+      padding-top: 15px;
+    }
+    .hero-label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 650; }
+    .hero-status p { margin: 6px 0 0; color: var(--secondary); font-size: 10px; line-height: 1.55; }
+
+    .hotkey {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    kbd {
+      min-width: 28px;
+      height: 27px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #c8c9cd;
+      border-bottom-width: 2px;
+      border-radius: 0;
+      padding: 0 6px;
+      color: #34353a;
+      background: #f8f8f9;
+      font: 600 11px/1 "SF Mono", Menlo, monospace;
+    }
+    .hotkey.large kbd { min-width: 36px; height: 34px; font-size: 13px; background: #fff; }
+
+    .check {
+      width: 17px;
+      height: 17px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #aeb0b5;
+      border-radius: 0;
+      background: #fff;
+      cursor: pointer;
+      padding: 0;
+    }
+    .check.on { color: #fff; border-color: var(--blue); background: var(--blue); }
+    .check.on::after { content: "✓"; font-size: 10px; font-weight: 700; }
+
+    .shortcut-primary {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      align-items: center;
+      gap: 28px;
+      padding: 18px 0;
+      border-top: 1px solid #cfd0d4;
+      border-bottom: 1px solid #cfd0d4;
+    }
+    .shortcut-primary h2 { margin: 0 0 5px; font-size: 12px; }
+    .shortcut-primary p { margin: 0; color: var(--secondary); font-size: 9px; }
+    .shortcut-edit { border: 0; padding: 0; background: transparent; cursor: pointer; }
+    .valid {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 9px;
+      color: var(--green);
+      font-size: 9px;
+    }
+    .valid::before { content: "✓"; font-weight: 700; }
+
+    .account-summary {
+      display: grid;
+      grid-template-columns: 42px minmax(0,1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 0 0 22px;
+      border-bottom: 1px solid #cfd0d4;
+    }
+    .account-summary .avatar { width: 42px; height: 42px; font-size: 13px; }
+    .account-name { font-size: 13px; font-weight: 650; }
+    .account-email { margin-top: 3px; color: var(--secondary); font-size: 9px; }
+    .plan-line {
+      display: grid;
+      grid-template-columns: minmax(0,1fr) auto;
+      align-items: center;
+      gap: 24px;
+      min-height: 74px;
+      border-bottom: 1px solid var(--line-light);
+    }
+    .plan-name { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 650; }
+    .label {
+      padding: 2px 5px;
+      color: var(--blue);
+      background: var(--blue-soft);
+      font-size: 8px;
+      font-weight: 700;
+      letter-spacing: .3px;
+    }
+    .plan-meta { margin-top: 4px; color: var(--secondary); font-size: 9px; }
+    .balance { font-size: 15px; font-weight: 650; }
+    .balance small { color: var(--secondary); font-size: 9px; font-weight: 400; }
+
+    .device {
+      min-height: 62px;
+      display: grid;
+      grid-template-columns: 28px minmax(0,1fr) auto;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--line-light);
+    }
+    .device-symbol {
+      width: 26px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #bfc0c5;
+      font-size: 10px;
+    }
+    .device-name { font-size: 10px; font-weight: 600; }
+    .device-meta { margin-top: 3px; color: var(--tertiary); font-size: 9px; }
+
+    .record-tabs {
+      display: flex;
+      border-bottom: 1px solid #cfd0d4;
+      margin-bottom: 18px;
+    }
+    .record-tab {
+      min-height: 34px;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      padding: 0 18px;
+      color: var(--secondary);
+      background: transparent;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .record-tab:first-child { padding-left: 0; }
+    .record-tab.active { color: var(--text); border-bottom-color: var(--blue); font-weight: 600; }
+    .record-pane { display: none; }
+    .record-pane.active { display: block; }
+    .record-path {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 8px;
+      color: var(--tertiary);
+      font-size: 9px;
+    }
+    .file-list { border-top: 1px solid #cfd0d4; }
+    .file-row {
+      min-height: 64px;
+      display: grid;
+      grid-template-columns: 30px minmax(0,1fr) 78px 76px 178px;
+      align-items: center;
+      gap: 11px;
+      border-bottom: 1px solid var(--line-light);
+    }
+    .file-icon {
+      width: 28px;
+      height: 24px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #bfc0c5;
+      color: #55565b;
+      font: 600 9px/1 "SF Mono", Menlo, monospace;
+    }
+    .file-name { overflow: hidden; font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+    .file-meta { margin-top: 3px; color: var(--tertiary); font-size: 8px; }
+    .file-cell { color: var(--secondary); font-size: 9px; }
+    .file-actions { display: flex; justify-content: flex-end; gap: 6px; }
+    .file-actions .button { min-height: 26px; padding: 0 8px; font-size: 9px; }
+    .record-view { width: min(820px, calc(100% - 48px)); padding-top: 24px; padding-bottom: 24px; }
+    .record-view .page-head { margin-bottom: 16px; }
+    .record-view .record-tabs { margin-bottom: 8px; }
+    .record-view .file-list { max-height: calc(100vh - 245px); min-height: 310px; overflow-y: auto; overscroll-behavior: contain; }
+    .record-view .file-row { min-height: 55px; }
+    .record-view .storage-summary { min-height: 38px; margin-top: 12px; }
+    .storage-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 48px;
+      margin-top: 20px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      color: var(--secondary);
+      font-size: 9px;
+    }
+
+    .provider {
+      margin-top: 32px;
+      padding-top: 18px;
+      border-top: 1px solid #cfd0d4;
+    }
+    .provider:first-of-type { margin-top: 0; }
+    .provider-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 22px;
+      margin-bottom: 18px;
+    }
+    .provider-title { margin: 0; font-size: 12px; font-weight: 650; }
+    .provider-copy { max-width: 490px; margin: 4px 0 0; color: var(--secondary); font-size: 9px; line-height: 1.55; }
+    .provider-status { color: var(--green); font-size: 9px; white-space: nowrap; }
+    .provider-simple .provider-head { margin-bottom: 12px; }
+    .provider-simple .provider-copy { max-width: 600px; }
+    .provider-key-label { display: block; margin-bottom: 5px; color: #4f5055; font-size: 9px; font-weight: 600; }
+    .provider-simple .provider-actions { margin-top: 12px; }
+    .advanced-settings {
+      margin-top: 14px;
+      border-top: 1px solid var(--line-light);
+      padding-top: 10px;
+    }
+    .advanced-settings summary {
+      color: var(--secondary);
+      cursor: pointer;
+      font-size: 9px;
+      list-style: none;
+    }
+    .advanced-settings summary::-webkit-details-marker { display: none; }
+    .advanced-settings summary::before { content: "＋"; display: inline-block; width: 16px; color: var(--blue); }
+    .advanced-settings[open] summary::before { content: "－"; }
+    .advanced-settings[open] summary { margin-bottom: 14px; color: var(--text); font-weight: 600; }
+    .config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+    .field-group.full { grid-column: 1 / -1; }
+    .field-group label { display: block; margin-bottom: 5px; color: #4f5055; font-size: 9px; font-weight: 600; }
+    .input, .select {
+      width: 100%;
+      height: 32px;
+      border: 1px solid #bfc0c5;
+      border-radius: 0;
+      padding: 0 9px;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+      font-size: 10px;
+    }
+    .input:focus, .select:focus { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+    .key-field { display: grid; grid-template-columns: minmax(0,1fr) auto; }
+    .key-field .input { border-right: 0; }
+    .key-field .button { min-height: 32px; }
+    .capabilities { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
+    .capability { display: flex; align-items: center; gap: 7px; color: var(--secondary); font-size: 9px; }
+    .capability .check { width: 15px; height: 15px; }
+    .provider-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    .security-note {
+      margin-top: 30px;
+      border-left: 3px solid var(--green);
+      padding: 8px 0 8px 12px;
+      color: var(--secondary);
+      font-size: 9px;
+      line-height: 1.6;
+    }
+
+    .transcript-modal { width: min(860px, calc(100vw - 80px)); max-height: min(82vh, 720px); padding: 18px; }
+    .transcript-head { align-items: center; padding-bottom: 10px; }
+    .transcript-head-actions { display: flex; align-items: center; gap: 5px; }
+    .transcript-head-actions .button { min-height: 24px; padding: 0 8px; font-size: 9px; }
+    .transcript-head-actions .close { margin-left: 4px; }
+    .transcript-meta { margin: 8px 0 6px; color: var(--secondary); font-size: 9px; }
+    .transcript-body {
+      min-height: 420px;
+      max-height: calc(82vh - 125px);
+      overflow: auto;
+      margin-bottom: 0;
+      border: 1px solid #c8c9cd;
+      padding: 14px;
+      color: #34353a;
+      background: #fafafa;
+      font: 11px/1.75 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+      white-space: pre-wrap;
+    }
+    .transcript-empty { color: var(--secondary); }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      display: none;
+      place-items: center;
+      padding: 20px;
+      background: rgba(20,21,24,.32);
+    }
+    .modal-backdrop.show { display: grid; }
+    .modal {
+      width: min(390px, 100%);
+      border: 1px solid #aeb0b5;
+      border-radius: 0;
+      padding: 22px;
+      background: #fff;
+      box-shadow: 0 20px 55px rgba(0,0,0,.23);
+    }
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid var(--line);
+    }
+    .modal h2 { margin: 0; font-size: 14px; }
+    .modal p { margin: 5px 0 0; color: var(--secondary); font-size: 9px; line-height: 1.55; }
+    .close { border: 0; padding: 0; color: var(--secondary); background: transparent; cursor: pointer; font-size: 18px; line-height: 1; }
+    .capture {
+      margin: 20px 0;
+      border: 1px solid #c8c9cd;
+      padding: 22px;
+      text-align: center;
+    }
+    .capture strong { display: block; margin-bottom: 12px; font-size: 10px; }
+    .captured-keys { display: flex; justify-content: center; gap: 5px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+    .packs { margin: 18px 0; border-top: 1px solid var(--line); }
+    .pack {
+      width: 100%;
+      min-height: 52px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      padding: 0;
+      background: #fff;
+      text-align: left;
+      cursor: pointer;
+    }
+    .pack:hover, .pack.selected { background: #f3f6fb; }
+    .pack.selected { box-shadow: inset 3px 0 0 var(--blue); padding-left: 10px; }
+    .pack-name { font-size: 10px; font-weight: 600; }
+    .pack-extra { margin-top: 2px; color: var(--secondary); font-size: 8px; }
+    .pack-price { font-size: 11px; font-weight: 600; }
+
+    .toast {
+      position: fixed;
+      z-index: 20;
+      left: 50%;
+      bottom: 28px;
+      transform: translate(-50%,8px);
+      border: 1px solid #111;
+      padding: 8px 12px;
+      color: #fff;
+      background: #222327;
+      opacity: 0;
+      pointer-events: none;
+      font-size: 10px;
+      transition: opacity .15s, transform .15s;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%,0); }
+
+    @media (max-width: 720px) {
+      .stage { padding: 0; }
+      .app {
+        width: 100%;
+        height: 100vh;
+        min-height: 560px;
+        grid-template-columns: 62px minmax(0,1fr);
+        border: 0;
+        box-shadow: none;
+      }
+      .titlebar { grid-template-columns: 90px 1fr 90px; }
+      .service-inline span { display: none; }
+      .sidebar { padding-top: 16px; }
+      .brand { justify-content: center; margin-inline: 0; }
+      .brand-copy, .nav-label, .sidebar-footer { display: none; }
+      .nav-button { justify-content: center; padding: 0; }
+      .nav-icon { width: auto; }
+      .view { width: calc(100% - 34px); padding-top: 28px; }
+    }
+
+    @media (max-width: 520px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: 42px minmax(0,1fr) 52px; }
+      .sidebar {
+        grid-row: 3;
+        flex-direction: row;
+        border-top: 1px solid #d7d7da;
+        border-right: 0;
+        padding: 0;
+      }
+      .brand { display: none; }
+      .nav { width: 100%; grid-template-columns: repeat(5,1fr); }
+      .nav-button { height: 51px; }
+      .main { grid-row: 2; }
+      .page-head, .hero-status, .shortcut-primary { align-items: flex-start; grid-template-columns: 1fr; flex-direction: column; }
+      .hero-status-body { grid-template-columns: 1fr; align-items: flex-start; }
+      .page-head { margin-bottom: 26px; }
+      .row { gap: 12px; }
+      .account-summary { grid-template-columns: 38px minmax(0,1fr); }
+      .account-summary .button { grid-column: 1 / -1; width: 100%; }
+      .transcript-modal { width: calc(100vw - 28px); max-height: 88vh; padding: 14px; }
+      .transcript-body { min-height: 300px; max-height: calc(88vh - 130px); }
+      .config-grid { grid-template-columns: 1fr; }
+      .field-group.full { grid-column: auto; }
+      .record-view { width: calc(100% - 34px); padding-top: 20px; }
+      .record-view .file-list { max-height: calc(100vh - 235px); }
+      .file-row { grid-template-columns: 28px minmax(0,1fr) auto; padding: 8px 0; }
+      .file-row > .file-cell { display: none; }
+      .file-actions { grid-column: 2 / -1; justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="app" aria-label="TBOX 客户端原型">
+      <header class="titlebar">
+        <div class="traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="window-title">TBOX</div>
+        <div class="service-inline"><i class="status-dot"></i><span>运行中</span></div>
+      </header>
+
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">S</div>
+          <div class="brand-copy"><div class="brand-name">TBOX</div><div class="brand-version">版本 1.0.0</div></div>
+        </div>
+        <nav class="nav" aria-label="主导航">
+          <button class="nav-button active" data-view="status"><span class="nav-icon">●</span><span class="nav-label">状态</span></button>
+          <button class="nav-button" data-view="shortcut"><span class="nav-icon">⌘</span><span class="nav-label">快捷键</span></button>
+          <button class="nav-button" data-view="records"><span class="nav-icon">▤</span><span class="nav-label">记录</span></button>
+          <button class="nav-button" data-view="models"><span class="nav-icon">◇</span><span class="nav-label">模型</span></button>
+          <button class="nav-button" data-view="account"><span class="nav-icon">◎</span><span class="nav-label">账户</span></button>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="user">
+            <div class="avatar">LK</div>
+            <div><div class="user-name">林开</div><div class="user-plan">专业版</div></div>
+          </div>
+        </div>
+      </aside>
+
+      <div class="main">
+        <section class="view active" id="view-status">
+          <div class="page-head">
+            <div><h1>状态</h1><p class="subtitle">TBOX 已准备好，可以随时截图。</p></div>
+            <button class="button primary test-shot">开始截图</button>
+          </div>
+
+          <div class="hero-status">
+            <div class="hero-heading">工具唤起快捷键</div>
+            <div class="hero-status-body">
+              <div>
+                <div class="hero-label"><i class="status-dot"></i>截图服务运行中</div>
+                <p>关闭此窗口不会退出截图服务。</p>
+              </div>
+              <div class="hotkey" aria-label="Control Shift A"><kbd>⌃</kbd><kbd>⇧</kbd><kbd>A</kbd></div>
+            </div>
+          </div>
+
+          <section class="section">
+            <div class="section-head"><h2 class="section-title">系统权限</h2><span class="section-note">2 项均已开启</span></div>
+            <div class="rows">
+              <div class="row"><div><div class="row-title">屏幕录制</div><div class="row-description">允许 TBOX 读取屏幕画面</div></div><div class="row-value success">已允许</div></div>
+              <div class="row"><div><div class="row-title">辅助功能</div><div class="row-description">允许 TBOX 响应全局快捷键</div></div><div class="row-value success">已允许</div></div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head"><h2 class="section-title">常用设置</h2></div>
+            <div class="rows">
+              <div class="row"><div><div class="row-title">开机自动启动</div><div class="row-description">登录 Mac 后自动运行截图服务</div></div><button class="check on" role="checkbox" aria-checked="true" aria-label="开机自动启动"></button></div>
+              <div class="row"><div><div class="row-title">截图完成提示</div><div class="row-description">复制或保存后显示简短提示</div></div><button class="check on" role="checkbox" aria-checked="true" aria-label="截图完成提示"></button></div>
+              <div class="row"><div><div class="row-title">自动检查更新</div><div class="row-description">同时更新客户端和截图服务</div></div><button class="check on" role="checkbox" aria-checked="true" aria-label="自动检查更新"></button></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-shortcut">
+          <div class="page-head">
+            <div><h1>快捷键</h1><p class="subtitle">一个快捷键即可进入截图，其他操作在截图界面完成。</p></div>
+            <button class="button text reset-shortcut">恢复默认</button>
+          </div>
+
+          <div class="shortcut-primary">
+            <div>
+              <h2>开始截图</h2>
+              <p>点击右侧按键组合即可修改。</p>
+              <div class="valid">未检测到冲突</div>
+            </div>
+            <button class="shortcut-edit open-recorder" aria-label="修改快捷键">
+              <span class="hotkey large"><kbd>⌃</kbd><kbd>⇧</kbd><kbd>A</kbd></span>
+            </button>
+          </div>
+
+          <section class="section">
+            <div class="section-head"><h2 class="section-title">截图中可用</h2><span class="section-note">固定按键</span></div>
+            <div class="rows">
+              <div class="row"><div><div class="row-title">完成并复制</div></div><div class="hotkey"><kbd>↩</kbd></div></div>
+              <div class="row"><div><div class="row-title">保存文件</div></div><div class="hotkey"><kbd>⌘</kbd><kbd>S</kbd></div></div>
+              <div class="row"><div><div class="row-title">撤销</div></div><div class="hotkey"><kbd>⌘</kbd><kbd>Z</kbd></div></div>
+              <div class="row"><div><div class="row-title">退出截图</div></div><div class="hotkey"><kbd>esc</kbd></div></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view record-view" id="view-records">
+          <div class="page-head">
+            <div><h1>记录</h1><p class="subtitle">管理保存在本机的录屏文件、录音转写会话和逐字稿。</p></div>
+            <button class="button open-storage">打开存储位置</button>
+          </div>
+
+          <div class="record-tabs" role="tablist" aria-label="记录类型">
+            <button class="record-tab active" data-pane="screen-files" role="tab" aria-selected="true">录屏文件&nbsp; 3</button>
+            <button class="record-tab" data-pane="meeting-files" role="tab" aria-selected="false">录音转写&nbsp; 3</button>
+          </div>
+
+          <div class="record-pane active" id="screen-files">
+            <div class="record-path"><span>~/Movies/TBOX/recordings</span><span>共 1.36 GB</span></div>
+            <div class="file-list">
+              <div class="file-row">
+                <div class="file-icon">MP4</div>
+                <div><div class="file-name">产品演示录屏.mp4</div><div class="file-meta">今天 15:42</div></div>
+                <div class="file-cell">18:24</div><div class="file-cell">486 MB</div>
+                <div class="file-actions"><button class="button local-action" data-message="正在打开录屏文件">播放</button><button class="button transcript-open" data-title="产品演示录屏.mp4" data-content="[00:00:12] 林开｜今天先介绍新版截图流程。|[00:03:08] 客户｜这里的快捷键可以自定义吗？|[00:03:16] 林开｜可以，在客户端的快捷键页面修改。">逐字稿</button><button class="button local-action" data-message="删除文件前会再次确认">删除</button></div>
+              </div>
+              <div class="file-row">
+                <div class="file-icon">MP4</div>
+                <div><div class="file-name">翻译功能测试.mp4</div><div class="file-meta">昨天 18:10</div></div>
+                <div class="file-cell">06:15</div><div class="file-cell">214 MB</div>
+                <div class="file-actions"><button class="button local-action" data-message="正在打开录屏文件">播放</button><button class="button transcript-open" data-title="翻译功能测试.mp4" data-content="[00:00:42] 林开｜现在测试中文到英文的翻译流程。|[00:01:10] 林开｜识别结果会保留原文，并支持重试。">逐字稿</button><button class="button local-action" data-message="删除文件前会再次确认">删除</button></div>
+              </div>
+              <div class="file-row">
+                <div class="file-icon">MP4</div>
+                <div><div class="file-name">完整屏幕录制.mp4</div><div class="file-meta">8 月 12 日 09:36</div></div>
+                <div class="file-cell">24:08</div><div class="file-cell">694 MB</div>
+                <div class="file-actions"><button class="button local-action" data-message="正在打开录屏文件">播放</button><button class="button transcript-open" data-title="完整屏幕录制.mp4" data-content="[00:02:04] 林开｜开始检查录屏文件的清晰度。|[00:05:32] 林开｜Retina 屏幕保持原生像素输出。">逐字稿</button><button class="button local-action" data-message="删除文件前会再次确认">删除</button></div>
+              </div>
+            </div>
+            <div class="storage-summary"><span>录屏使用 1.36 GB 本机空间</span><button class="button text local-action" data-message="可以按日期、大小或文件类型清理">管理存储</button></div>
+          </div>
+
+          <div class="record-pane" id="meeting-files">
+            <div class="record-path"><span>~/Library/Application Support/TBOX/Meetings</span><span>共 412 MB</span></div>
+            <div class="file-list">
+              <div class="file-row">
+                <div class="file-icon">M4A</div>
+                <div><div class="file-name">客户需求沟通.m4a</div><div class="file-meta">今天 10:02 · 系统声音 + 麦克风</div></div>
+                <div class="file-cell">58:43</div><div class="file-cell">126 MB</div>
+                <div class="file-actions"><button class="button local-action" data-message="正在播放录音文件">播放</button><button class="button transcript-open" data-title="客户需求沟通.m4a" data-content="[00:02:14] 客户张总｜第一期我们希望先解决内部协作的问题。|[00:04:36] 林开｜那我们先确认截图和录屏的使用边界。|[00:07:08] 客户张总｜可以，会议结束后请发我一份纪要。">逐字稿</button><button class="button local-action" data-message="删除文件前会再次确认">删除</button></div>
+              </div>
+              <div class="file-row">
+                <div class="file-icon">M4A</div>
+                <div><div class="file-name">产品周会.m4a</div><div class="file-meta">昨天 16:00 · 6 个录音分段</div></div>
+                <div class="file-cell">31:08</div><div class="file-cell">74 MB</div>
+                <div class="file-actions"><button class="button local-action" data-message="正在播放录音文件">播放</button><button class="button transcript-open" data-title="产品周会.m4a" data-content="[00:00:00]｜该录音的逐字稿正在准备中，请稍后再试。">逐字稿</button><button class="button local-action" data-message="删除文件前会再次确认">删除</button></div>
+              </div>
+              <div class="file-row">
+                <div class="file-icon">M4A</div>
+                <div><div class="file-name">临时录音 2026-08-12.m4a</div><div class="file-meta">8 月 12 日 11:24 · 仅麦克风</div></div>
+                <div class="file-cell">12:31</div><div class="file-cell">29 MB</div>
+                <div class="file-actions"><button class="button local-action" data-message="正在播放录音文件">播放</button><button class="button transcript-open" data-title="临时录音 2026-08-12.m4a" data-content="">逐字稿</button><button class="button local-action" data-message="删除文件前会再次确认">删除</button></div>
+              </div>
+            </div>
+            <div class="storage-summary"><span>原始录音默认永久保留，仅在用户确认后删除</span><button class="button text local-action" data-message="正在打开录音保留设置">保留策略</button></div>
+          </div>
+        </section>
+
+        <section class="view" id="view-models">
+          <div class="page-head">
+            <div><h1>模型</h1><p class="subtitle">配置录音转写服务与可选的 AI 会议纪要服务，分别设置。</p></div>
+          </div>
+
+          <section class="provider provider-simple">
+            <div class="provider-head">
+              <div><h2 class="provider-title">转写与 AI 纪要服务</h2><p class="provider-copy">录音转写可以独立使用；接入 LLM 后再生成 AI 会议纪要。</p></div>
+              <span class="provider-status">已配置</span>
+            </div>
+            <label class="provider-key-label" for="model-key">API Key</label>
+            <div class="key-field"><input class="input api-key" id="model-key" type="password" placeholder="输入你的模型服务 API Key" autocomplete="new-password"><button class="button reveal-key" data-target="model-key">显示</button></div>
+            <details class="advanced-settings">
+              <summary>高级设置（服务地址和模型）</summary>
+              <div class="config-grid">
+                <div class="field-group full"><label for="model-url">Base URL</label><input class="input" id="model-url" value="https://api.openai.com/v1" autocomplete="off"></div>
+                <div class="field-group"><label for="asr-model">语音转写模型</label><input class="input" id="asr-model" value="whisper-1" autocomplete="off"></div>
+                <div class="field-group"><label for="llm-model">文本模型</label><input class="input" id="llm-model" value="gpt-4.1-mini" autocomplete="off"></div>
+              </div>
+            </details>
+            <div class="provider-actions"><button class="button test-provider" data-provider="AI 服务">测试连接</button><button class="button primary save-provider" data-provider="AI 服务">保存</button></div>
+          </section>
+
+            <div class="security-note">正式实现中 ASR 与 LLM 使用独立配置和密钥。API Key 只保存到 macOS Keychain，不写入普通配置、日志或 TBOX 云端。只有开始转写时才向 ASR 发送录音分段；只有生成 AI 纪要时才向 LLM 发送逐字稿。</div>
+        </section>
+
+        <section class="view" id="view-account">
+          <div class="page-head">
+            <div><h1>账户</h1><p class="subtitle">管理登录、订阅、点数和设备。</p></div>
+          </div>
+
+          <div class="account-summary">
+            <div class="avatar">LK</div>
+            <div><div class="account-name">林开</div><div class="account-email">lin.kai@example.com</div></div>
+            <button class="button">编辑资料</button>
+          </div>
+
+          <section class="section">
+            <div class="section-head"><h2 class="section-title">订阅与点数</h2></div>
+            <div class="plan-line">
+              <div><div class="plan-name">专业版 <span class="label">PRO</span></div><div class="plan-meta">¥18 / 月 · 2026 年 9 月 13 日续费</div></div>
+              <button class="button">管理订阅</button>
+            </div>
+            <div class="plan-line">
+              <div><div class="balance">2,480 <small>点</small></div><div class="plan-meta">用于图片翻译等 AI 功能</div></div>
+              <button class="button primary open-recharge">充值</button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head"><h2 class="section-title">设备</h2><span class="section-note">1 / 3 台</span></div>
+            <div class="device">
+              <div class="device-symbol">▰</div>
+              <div><div class="device-name">Kai 的 MacBook Pro</div><div class="device-meta">macOS 15.5 · 当前设备</div></div>
+              <div class="row-value success">在线</div>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-head"><h2 class="section-title">账户信息</h2></div>
+            <div class="rows">
+              <div class="row"><div class="row-title">用户 ID</div><div class="row-value">ST-2084-61K&nbsp;&nbsp;<button class="button text copy-id">复制</button></div></div>
+              <div class="row"><div class="row-title">登录方式</div><div class="row-value">Apple 登录</div></div>
+              <div class="row"><div class="row-title">退出当前账户</div><button class="button danger sign-out">退出登录</button></div>
+            </div>
+          </section>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal-backdrop" id="shortcut-modal" role="dialog" aria-modal="true" aria-labelledby="shortcut-title">
+    <div class="modal">
+      <div class="modal-head">
+        <div><h2 id="shortcut-title">修改快捷键</h2><p>同时按下一个修饰键和一个字母键。</p></div>
+        <button class="close" aria-label="关闭">×</button>
+      </div>
+      <div class="capture" tabindex="0">
+        <strong>请按下新的快捷键</strong>
+        <div class="captured-keys"><kbd>⌃</kbd><kbd>⇧</kbd><kbd>A</kbd></div>
+      </div>
+      <div class="modal-actions"><button class="button close-modal">取消</button><button class="button primary save-shortcut">保存</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="recharge-modal" role="dialog" aria-modal="true" aria-labelledby="recharge-title">
+    <div class="modal">
+      <div class="modal-head">
+        <div><h2 id="recharge-title">充值点数</h2><p>点数仅在使用云端 AI 功能时消耗。</p></div>
+        <button class="close" aria-label="关闭">×</button>
+      </div>
+      <div class="packs">
+        <button class="pack" data-pack="500 点" data-price="¥6"><span><span class="pack-name">500 点</span><span class="pack-extra">约 100 次图片翻译</span></span><span class="pack-price">¥6</span></button>
+        <button class="pack selected" data-pack="2,200 点" data-price="¥18"><span><span class="pack-name">2,200 点</span><span class="pack-extra">含赠送 200 点</span></span><span class="pack-price">¥18</span></button>
+        <button class="pack" data-pack="7,000 点" data-price="¥48"><span><span class="pack-name">7,000 点</span><span class="pack-extra">含赠送 1,000 点</span></span><span class="pack-price">¥48</span></button>
+      </div>
+      <div class="modal-actions"><button class="button close-modal">取消</button><button class="button primary confirm-pay">使用 Apple Pay 支付 ¥18</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="transcript-modal" role="dialog" aria-modal="true" aria-labelledby="transcript-title">
+    <div class="modal transcript-modal">
+      <div class="modal-head transcript-head">
+        <div><h2 id="transcript-title">逐字稿</h2><p id="transcript-file">本机文件</p></div>
+        <div class="transcript-head-actions"><button class="button copy-transcript">复制</button><button class="button download-transcript">下载 TXT</button><button class="close" aria-label="关闭">×</button></div>
+      </div>
+      <div class="transcript-meta">内容仅来自当前本机文件，不会自动上传。</div>
+      <div class="transcript-body" id="transcript-body"></div>
+    </div>
+  </div>
+
+  <div class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const views = document.querySelectorAll('.view');
+    const navButtons = document.querySelectorAll('.nav-button');
+    const toast = document.querySelector('.toast');
+    let toastTimer;
+    let recorded = ['⌃', '⇧', 'A'];
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    function showView(name) {
+      views.forEach(view => view.classList.toggle('active', view.id === `view-${name}`));
+      navButtons.forEach(button => button.classList.toggle('active', button.dataset.view === name));
+      document.querySelector('.main').scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    navButtons.forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
+    document.querySelectorAll('.check').forEach(check => check.addEventListener('click', () => {
+      const enabled = check.classList.toggle('on');
+      check.setAttribute('aria-checked', String(enabled));
+      showToast(enabled ? '已开启' : '已关闭');
+    }));
+    document.querySelector('.test-shot').addEventListener('click', () => showToast('已开始截图 · 按 Esc 退出'));
+    document.querySelector('.copy-id').addEventListener('click', () => showToast('用户 ID 已复制'));
+    document.querySelector('.sign-out').addEventListener('click', () => showToast('原型演示：未退出账户'));
+    document.querySelector('.open-storage').addEventListener('click', () => showToast('正在打开 TBOX 本地存储位置'));
+    document.querySelectorAll('.local-action').forEach(button => button.addEventListener('click', () => showToast(button.dataset.message)));
+
+    document.querySelectorAll('.record-tab').forEach(tab => tab.addEventListener('click', () => {
+      document.querySelectorAll('.record-tab').forEach(item => {
+        item.classList.toggle('active', item === tab);
+        item.setAttribute('aria-selected', String(item === tab));
+      });
+      document.querySelectorAll('.record-pane').forEach(pane => pane.classList.toggle('active', pane.id === tab.dataset.pane));
+    }));
+
+    document.querySelectorAll('.reveal-key').forEach(button => button.addEventListener('click', () => {
+      const input = document.getElementById(button.dataset.target);
+      const showing = input.type === 'text';
+      input.type = showing ? 'password' : 'text';
+      button.textContent = showing ? '显示' : '隐藏';
+    }));
+    document.querySelectorAll('.test-provider').forEach(button => button.addEventListener('click', () => showToast(`正在测试${button.dataset.provider}，不会发送用户文件`)));
+    document.querySelectorAll('.save-provider').forEach(button => button.addEventListener('click', () => showToast(`${button.dataset.provider}配置已保存到本机`)));
+
+    const shortcutModal = document.getElementById('shortcut-modal');
+    const rechargeModal = document.getElementById('recharge-modal');
+    const transcriptModal = document.getElementById('transcript-modal');
+    const capture = shortcutModal.querySelector('.capture');
+    const capturedKeys = shortcutModal.querySelector('.captured-keys');
+    const transcriptBody = document.getElementById('transcript-body');
+    const transcriptFile = document.getElementById('transcript-file');
+    let currentTranscript = '';
+
+    function openModal(modal) {
+      modal.classList.add('show');
+      setTimeout(() => modal.querySelector('[tabindex]')?.focus(), 20);
+    }
+    function closeModal(modal) { modal.classList.remove('show'); }
+
+    document.querySelector('.open-recorder').addEventListener('click', () => openModal(shortcutModal));
+    document.querySelector('.open-recharge').addEventListener('click', () => openModal(rechargeModal));
+    document.querySelectorAll('.transcript-open').forEach(button => button.addEventListener('click', () => {
+      currentTranscript = (button.dataset.content || '').replaceAll('|', '\n');
+      transcriptFile.textContent = button.dataset.title || '本机文件';
+      transcriptBody.textContent = currentTranscript || '该文件还没有逐字稿。完成转写后，可以在这里查看、复制或下载。';
+      transcriptBody.classList.toggle('transcript-empty', !currentTranscript);
+      openModal(transcriptModal);
+    }));
+    document.querySelector('.copy-transcript').addEventListener('click', async () => {
+      if (!currentTranscript) { showToast('当前文件还没有可复制的逐字稿'); return; }
+      try { await navigator.clipboard.writeText(currentTranscript); } catch { /* 原型环境可能没有剪贴板权限 */ }
+      showToast('逐字稿已复制');
+    });
+    document.querySelector('.download-transcript').addEventListener('click', () => {
+      if (!currentTranscript) { showToast('当前文件还没有可下载的逐字稿'); return; }
+      const blob = new Blob([currentTranscript], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${transcriptFile.textContent.replace(/\.(mp4|m4a)$/i, '')}-逐字稿.txt`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast('TXT 文件已下载');
+    });
+    document.querySelectorAll('.close, .close-modal').forEach(button => button.addEventListener('click', () => closeModal(button.closest('.modal-backdrop'))));
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.addEventListener('mousedown', event => {
+      if (event.target === backdrop) closeModal(backdrop);
+    }));
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') document.querySelectorAll('.modal-backdrop.show').forEach(closeModal);
+    });
+
+    capture.addEventListener('keydown', event => {
+      event.preventDefault();
+      const keys = [];
+      if (event.ctrlKey) keys.push('⌃');
+      if (event.altKey) keys.push('⌥');
+      if (event.shiftKey) keys.push('⇧');
+      if (event.metaKey) keys.push('⌘');
+      if (!['Control','Alt','Shift','Meta'].includes(event.key)) {
+        keys.push(event.key.length === 1 ? event.key.toUpperCase() : event.key);
+      }
+      if (keys.length >= 2) {
+        recorded = keys;
+        capturedKeys.innerHTML = keys.map(key => `<kbd>${key}</kbd>`).join('');
+      }
+    });
+
+    function updateShortcut() {
+      document.querySelector('.open-recorder .hotkey').innerHTML = recorded.map(key => `<kbd>${key}</kbd>`).join('');
+      capturedKeys.innerHTML = recorded.map(key => `<kbd>${key}</kbd>`).join('');
+    }
+
+    document.querySelector('.save-shortcut').addEventListener('click', () => {
+      updateShortcut();
+      closeModal(shortcutModal);
+      showToast('快捷键已保存');
+    });
+    document.querySelector('.reset-shortcut').addEventListener('click', () => {
+      recorded = ['⌃','⇧','A'];
+      updateShortcut();
+      showToast('已恢复默认快捷键');
+    });
+
+    const payButton = document.querySelector('.confirm-pay');
+    document.querySelectorAll('.pack').forEach(pack => pack.addEventListener('click', () => {
+      document.querySelectorAll('.pack').forEach(item => item.classList.remove('selected'));
+      pack.classList.add('selected');
+      payButton.textContent = `使用 Apple Pay 支付 ${pack.dataset.price}`;
+    }));
+    payButton.addEventListener('click', () => {
+      closeModal(rechargeModal);
+      showToast('支付完成后点数将立即到账');
+    });
+  </script>
+</body>
+</html>

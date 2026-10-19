@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>截图工具 - 交互流程设计</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Helvetica Neue', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 40px;
+  }
+
+  /* 流程步骤 */
+  .flow-container {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+  .step {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  .step-number {
+    flex-shrink: 0;
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+  }
+  .step-content { flex: 1; }
+  .step-title {
+    font-size: 18px; font-weight: 600;
+    margin-bottom: 4px;
+    color: #fff;
+  }
+  .step-desc {
+    font-size: 13px; color: #aaa;
+    margin-bottom: 16px;
+  }
+
+  /* 模拟屏幕 */
+  .screen-mock {
+    width: 100%;
+    aspect-ratio: 16/10;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    border: 2px solid #333;
+    background: #2a2a3e;
+  }
+  .screen-content {
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, #2d3561 0%, #1a1a2e 50%, #0f3460 100%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* 模拟桌面内容 */
+  .desktop-icons {
+    position: absolute; top: 20px; left: 20px;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .desktop-icon {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    opacity: 0.4;
+  }
+  .desktop-icon .icon-box {
+    width: 40px; height: 40px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.15);
+  }
+  .desktop-icon span { font-size: 10px; color: #888; }
+  .menu-bar {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 24px;
+    background: rgba(0,0,0,0.4);
+    display: flex; align-items: center; padding: 0 12px;
+    gap: 16px;
+    font-size: 11px; color: #888;
+  }
+  .menu-bar .active { color: #667eea; font-weight: 600; }
+
+  /* 遮罩层 */
+  .overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .overlay.hidden { display: none; }
+
+  /* 选区框 */
+  .selection-box {
+    position: absolute;
+    border: 2px solid #667eea;
+    border-radius: 2px;
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.5);
+  }
+  .selection-box::before {
+    content: '';
+    position: absolute; inset: 0;
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+
+  /* 尺寸提示 */
+  .dim-label {
+    position: absolute;
+    background: #667eea;
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  /* 放大镜 */
+  .magnifier {
+    position: absolute;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  .magnifier-content {
+    width: 100%; height: 100%;
+    background: repeating-conic-gradient(#3a3a5e 0% 25%, #2a2a4e 0% 50%);
+    background-size: 8px 8px;
+  }
+  .magnifier-crosshair {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 20px; height: 20px;
+  }
+  .magnifier-crosshair::before,
+  .magnifier-crosshair::after {
+    content: ''; position: absolute;
+    background: #ff4757;
+  }
+  .magnifier-crosshair::before {
+    top: 50%; left: 0; right: 0; height: 1px; transform: translateY(-50%);
+  }
+  .magnifier-crosshair::after {
+    left: 50%; top: 0; bottom: 0; width: 1px; transform: translateX(-50%);
+  }
+
+  /* 边缘工具栏 */
+  .toolbar {
+    position: absolute;
+    display: flex;
+    gap: 4px;
+    background: rgba(30,30,50,0.95);
+    backdrop-filter: blur(20px);
+    border-radius: 10px;
+    padding: 6px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .toolbar-item {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 9px; color: #aaa;
+  }
+  .toolbar-item:hover {
+    background: rgba(102,126,234,0.2);
+    color: #fff;
+  }
+  .toolbar-item.active {
+    background: rgba(102,126,234,0.3);
+    color: #667eea;
+  }
+  .toolbar-icon { font-size: 16px; }
+
+  /* 工具栏位置标注 */
+  .toolbar-pos {
+    position: absolute;
+    display: flex; align-items: center; gap: 4px;
+    font-size: 10px; color: #667eea;
+  }
+
+  /* 快捷键提示 */
+  .shortcut-hint {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: rgba(102,126,234,0.15);
+    border: 1px solid rgba(102,126,234,0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: #667eea;
+    font-family: 'SF Mono', monospace;
+  }
+
+  /* 状态标签 */
+  .state-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .state-idle { background: rgba(100,100,100,0.2); color: #888; }
+  .state-capture { background: rgba(102,126,234,0.2); color: #667eea; }
+  .state-done { background: rgba(46,204,113,0.2); color: #2ecc71; }
+  .state-annotate { background: rgba(255,165,2,0.2); color: #ffa502; }
+
+  /* 剪贴板提示 */
+  .clipboard-toast {
+    position: absolute;
+    bottom: 30px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(46,204,113,0.9);
+    color: #fff;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 13px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* 标注工具 */
+  .annotation-tools {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    display: flex; gap: 8px;
+    background: rgba(30,30,50,0.95);
+    border-radius: 12px;
+    padding: 8px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  .ann-tool {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 16px;
+  }
+  .ann-tool:hover { background: rgba(255,255,255,0.1); }
+  .ann-tool.active { background: rgba(102,126,234,0.3); }
+
+  /* 标注元素示意 */
+  .annotation-demo {
+    position: absolute;
+  }
+  .ann-rect {
+    border: 2px solid #ff4757;
+    border-radius: 2px;
+  }
+  .ann-arrow {
+    color: #ffa502;
+    font-size: 24px;
+  }
+  .ann-text {
+    background: rgba(255,71,87,0.9);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .ann-number {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: #ff4757;
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+  }
+
+  /* 贴图窗口 */
+  .pin-window {
+    position: absolute;
+    border: 2px solid rgba(102,126,234,0.5);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+  .pin-header {
+    height: 24px;
+    background: rgba(30,30,50,0.95);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 8px;
+    font-size: 10px; color: #888;
+  }
+  .pin-close {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #ff4757;
+  }
+
+  /* 连接箭头 */
+  .flow-arrow {
+    text-align: center;
+    color: #555;
+    font-size: 24px;
+    margin: -16px 0;
+  }
+
+  /* 信息面板 */
+  .info-panel {
+    background: rgba(30,30,50,0.6);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 12px;
+    font-size: 12px;
+  }
+  .info-row {
+    display: flex; justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #888; }
+  .info-value { color: #e0e0e0; font-weight: 500; }
+
+  /* 交互模型总结 */
+  .summary {
+    margin-top: 40px;
+    background: rgba(102,126,234,0.08);
+    border: 1px solid rgba(102,126,234,0.2);
+    border-radius: 16px;
+    padding: 28px;
+  }
+  .summary h2 {
+    font-size: 20px;
+    margin-bottom: 16px;
+    color: #667eea;
+  }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 16px;
+  }
+  .summary-item {
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .summary-item h3 {
+    font-size: 14px;
+    color: #667eea;
+    margin-bottom: 8px;
+  }
+  .summary-item p {
+    font-size: 12px;
+    color: #aaa;
+    line-height: 1.6;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>截图工具 — 交互流程设计</h1>
+  <p class="subtitle">一个快捷键走天下 · 框选即截图 · 边缘切换功能</p>
+
+  <div class="flow-container">
+
+    <!-- 步骤1：日常状态 -->
+    <div class="step">
+      <div class="step-number">1</div>
+      <div class="step-content">
+        <div class="step-title">日常状态 <span class="state-badge state-idle">Idle</span></div>
+        <div class="step-desc">托盘常驻，后台运行，等待快捷键唤起</div>
+        <div class="screen-mock">
+          <div class="screen-content">
+            <div class="menu-bar">
+              <span>📝 文档</span>
+              <span>终端</span>
+              <span>Safari</span>
+              <span style="margin-left:auto;color:#667eea;">🔴 截图工具</span>
+            </div>
+            <div class="desktop-icons">
+              <div class="desktop-icon"><div class="icon-box"></div><span>文件夹</span></div>
+              <div class="desktop-icon"><div class="icon-box"></div><span>文档</span></div>
+            </div>
+            <div style="text-align:center;color:#555;">
+              <p style="font-size:14px;margin-bottom:8px;">后台运行中</p>
+              <p>按下 <span class="shortcut-hint">⇧ Z</span> 唤起</p>
+            </div>
+          </div>
+        </div>
+        <div class="info-panel">
+          <div class="info-row"><span class="info-label">快捷键</span><span class="info-value">⇧ Shift + Z</span></div>
+          <div class="info-row"><span class="info-label">唤起延迟</span><span class="info-value">&lt; 100ms</span></div>
+          <div class="info-row"><span class="info-label">托盘状态</span><span class="info-value">常驻后台</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- 步骤2：遮罩出现 -->
+    <div class="step">
+      <div class="step-number">2</div>
+      <div class="step-content">
+        <div class="step-title">遮罩出现 <span class="state-badge state-capture">Capturing</span></div>
+        <div class="step-desc">按下快捷键瞬间，全屏半透明遮罩覆盖，画面冻结</div>
+        <div class="screen-mock">
+          <div class="screen-content">
+            <div class="menu-bar">
+              <span style="opacity:0.3;">📝 文档</span>
+              <span style="opacity:0.3;">终端</span>
+            </div>
+            <div class="desktop-icons" style="opacity:0.3;">
+              <div class="desktop-icon"><div class="icon-box"></div><span>文件夹</span></div>
+            </div>
+            <div class="overlay" style="background:rgba(0,0,0,0.3);">
+              <div style="text-align:center;color:rgba(255,255,255,0.6);">
+                <p style="font-size:16px;margin-bottom:4px;">🖱️ 拖拽鼠标框选区域</p>
+                <p style="font-size:12px;opacity:0.6;">按 Esc 取消</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="info-panel">
+          <div class="info-row"><span class="info-label">遮罩层级</span><span class="info-value">NSPanel · screenSaver (1000)</span></div>
+          <div class="info-row"><span class="info-label">画面状态</span><span class="info-value">冻结（显示按下瞬间的画面）</span></div>
+          <div class="info-row"><span class="info-label">鼠标行为</span><span class="info-value">立即响应拖拽</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- 步骤3：框选中 -->
+    <div class="step">
+      <div class="step-number">3</div>
+      <div class="step-content">
+        <div class="step-title">框选中 <span class="state-badge state-capture">Capturing</span></div>
+        <div class="step-desc">拖拽鼠标绘制选区，实时显示尺寸、放大镜、边缘工具栏</div>
+        <div class="screen-mock">
+          <div class="screen-content">
+            <div class="menu-bar" style="opacity:0.2;">
+              <span>📝 文档</span>
+            </div>
+            <!-- 选区框 -->
+            <div class="selection-box" style="left:15%;top:20%;width:50%;height:55%;">
+              <!-- 尺寸提示 -->
+              <div class="dim-label" style="bottom:-26px;right:0;">1280 × 720</div>
+            </div>
+            <!-- 放大镜 -->
+            <div class="magnifier" style="left:68%;top:78%;">
+              <div class="magnifier-content"></div>
+              <div class="magnifier-crosshair"></div>
+            </div>
+            <!-- 边缘工具栏（框选过程中浮出） -->
+            <div class="toolbar" style="right:15%;top:20%;transform:translate(50%,-110%);">
+              <div class="toolbar-item">
+                <span class="toolbar-icon">✏️</span>
+                <span>标注</span>
+              </div>
+              <div class="toolbar-item">
+                <span class="toolbar-icon">🎥</span>
+                <span>录屏</span>
+              </div>
+              <div class="toolbar-item">
+                <span class="toolbar-icon">🌐</span>
+                <span>翻译</span>
+              </div>
+              <div class="toolbar-item">
+                <span class="toolbar-icon">📌</span>
+                <span>贴图</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="info-panel">
+          <div class="info-row"><span class="info-label">选区框</span><span class="info-value">蓝色边框 + 外部遮罩</span></div>
+          <div class="info-row"><span class="info-label">放大镜</span><span class="info-value">像素级 · 显示 RGB 色值</span></div>
+          <div class="info-row"><span class="info-label">尺寸提示</span><span class="info-value">选区右下角实时显示 W×H</span></div>
+          <div class="info-row"><span class="info-label">工具栏</span><span class="info-value">框选过程中浮出，鼠标移入可切换功能</span></div>
+          <div class="info-row"><span class="info-label">智能吸附</span><span class="info-value">靠近窗口边缘 5px 自动对齐</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- 步骤4A：默认截图 -->
+    <div class="step">
+      <div class="step-number">4A</div>
+      <div class="step-content">
+        <div class="step-title">松手即截图（默认行为） <span class="state-badge state-done">Done</span></div>
+        <div class="step-desc">松开鼠标 → 自动裁剪选区 → 复制到剪贴板 → 遮罩消失</div>
+        <div class="screen-mock">
+          <div class="screen-content">
+            <div class="menu-bar">
+              <span>📝 文档</span>
+              <span>终端</span>
+              <span>Safari</span>
+            </div>
+            <div class="desktop-icons">
+              <div class="desktop-icon"><div class="icon-box"></div><span>文件夹</span></div>
+            </div>
+            <!-- 剪贴板提示 -->
+            <div class="clipboard-toast">
+              <span>✅</span>
+              <span>已复制到剪贴板</span>
+            </div>
+          </div>
+        </div>
+        <div class="info-panel">
+          <div class="info-row"><span class="info-label">默认行为</span><span class="info-value">松手 = 截图完成，无需点确认</span></div>
+          <div class="info-row"><span class="info-label">复制延迟</span><span class="info-value">&lt; 50ms</span></div>
+          <div class="info-row"><span class="info-label">剪贴板</span><span class="info-value">NSPasteboard · 可直接 Cmd+V 粘贴</span></div>
+          <div class="info-row"><span class="info-label">保存文件</span><span class="info-value">默认不保存，⌘S 手动保存</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- 步骤4B：进入标注 -->
+    <div class="step">
+      <div class="step-number">4B</div>
+      <div class="step-content">
+        <div class="step-title">从工具栏进入标注 <span class="state-badge state-annotate">Annotating</span></div>
+        <div class="step-desc">框选后点击"标注" → 进入标注模式，顶部浮出工具条</div>
+        <div class="screen-mock">
+          <div class="screen-content">
+            <div class="menu-bar" style="opacity:0.2;">
+              <span>📝 文档</span>
+            </div>
+            <!-- 选区保持高亮 -->
+            <div class="selection-box" style="left:15%;top:20%;width:50%;height:55%;box-shadow:none;border-color:transparent;">
+              <!-- 标注元素示意 -->
+              <div class="annotation-demo ann-rect" style="left:10%;top:15%;width:40%;height:25%;"></div>
+              <div class="annotation-demo ann-number" style="left:10%;top:10%;">1</div>
+              <div class="annotation-demo ann-text" style="left:55%;top:60%;">这里需要注意</div>
+              <div class="annotation-demo ann-arrow" style="left:50%;top:40%;">→</div>
+            </div>
+            <!-- 标注工具栏 -->
+            <div class="annotation-tools" style="top:20%;left:65%;">
+              <div class="ann-tool active" title="矩形">▭</div>
+              <div class="ann-tool" title="箭头">→</div>
+              <div class="ann-tool" title="文字">T</div>
+              <div class="ann-tool" title="马赛克">🔲</div>
+              <div class="ann-tool" title="高亮">🖍️</div>
+              <div class="ann-tool" title="序号">①</div>
+              <div class="ann-tool" style="background:rgba(255,71,87,0.2);color:#ff4757;" title="颜色">🔴</div>
+            </div>
+            <!-- 底部操作栏 -->
+            <div class="toolbar" style="bottom:20%;right:15%;transform:translate(50%,120%);">
+              <div class="toolbar-item"><span class="toolbar-icon">↩️</span><span>撤销</span></div>
+              <div class="toolbar-item"><span class="toolbar-icon">↪️</span><span>重做</span></div>
+              <div class="toolbar-item active" style="background:rgba(46,204,113,0.2);color:#2ecc71;"><span class="toolbar-icon">✅</span><span>完成</span></div>
+              <div class="toolbar-item"><span class="toolbar-icon">❌</span><span>取消</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="info-panel">
+          <div class="info-row"><span class="info-label">标注工具</span><span class="info-value">矩形 · 箭头 · 文字 · 马赛克 · 高亮 · 序号</span></div>
+          <div class="info-row"><span class="info-label">二次编辑</span><span class="info-value">所有标注元素可拖拽、调整、删除</span></div>
+          <div class="info-row"><span class="info-label">完成操作</span><span class="info-value">标注合成到截图 → 复制到剪贴板</span></div>
+          <div class="info-row"><span class="info-label">快捷键</span><span class="info-value">⌘Z 撤销 · ⌘⇧Z 重做 · Esc 取消</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">↓</div>
+
+    <!-- 步骤5：贴图 -->
+    <div class="step">
+      <div class="step-number">5</div>
+      <div class="step-content">
+        <div class="step-title">贴图钉在屏幕上 <span class="state-badge state-done">Pinned</span></div>
+        <div class="step-desc">框选后点击"贴图" → 截图钉在屏幕上，可拖动、可关闭</div>
+        <div class="screen-mock">
+          <div class="screen-content">
+            <div class="menu-bar">
+              <span>📝 文档</span>
+              <span>终端</span>
+            </div>
+            <div class="desktop-icons">
+              <div class="desktop-icon"><div class="icon-box"></div><span>文件夹</span></div>
+            </div>
+            <!-- 贴图窗口 -->
+            <div class="pin-window" style="right:10%;top:15%;width:35%;height:50%;">
+              <div class="pin-header">
+                <span>📌 贴图</span>
+                <div style="display:flex;gap:6px;">
+                  <div class="pin-close" style="background:#ffd43b;"></div>
+                  <div class="pin-close" style="background:#69db7c;"></div>
+                  <div class="pin-close"></div>
+                </div>
+              </div>
+              <div style="padding:8px;font-size:10px;color:#666;background:rgba(255,255,255,0.05);height:calc(100% - 24px);">
+                <div style="background:rgba(102,126,234,0.1);height:100%;border-radius:4px;display:flex;align-items:center;justify-content:center;">
+                  <span style="color:#667eea;">截图内容</span>
+                </div>
+              </div>
+            </div>
+            <div style="position:absolute;bottom:20px;left:20px;color:#555;font-size:12px;">
+              <p>贴图始终置顶 · 可拖动位置 · 双击关闭</p>
+            </div>
+          </div>
+        </div>
+        <div class="info-panel">
+          <div class="info-row"><span class="info-label">贴图行为</span><span class="info-value">截图作为置顶窗口钉在屏幕上</span></div>
+          <div class="info-row"><span class="info-label">窗口属性</span><span class="info-value">始终置顶 · 不抢焦点 · 可拖动</span></div>
+          <div class="info-row"><span class="info-label">关闭方式</span><span class="info-value">双击关闭 · 右键菜单关闭</span></div>
+          <div class="info-row"><span class="info-label">多贴图</span><span class="info-value">支持同时钉多个贴图</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 交互模型总结 -->
+  <div class="summary">
+    <h2>交互模型总结</h2>
+    <div class="summary-grid">
+      <div class="summary-item">
+        <h3>🎯 一个快捷键</h3>
+        <p>⇧Z 唤起，不需要记忆多个快捷键。所有功能通过边缘工具栏切换。</p>
+      </div>
+      <div class="summary-item">
+        <h3>🖱️ 框选即截图</h3>
+        <p>松手 = 截图完成，自动复制到剪贴板。不需要点确认按钮，零额外操作。</p>
+      </div>
+      <div class="summary-item">
+        <h3>📐 边缘工具栏</h3>
+        <p>框选过程中浮出，想标注/录屏/翻译/贴图时鼠标移过去选。不点就默认截图。</p>
+      </div>
+      <div class="summary-item">
+        <h3>⚡ 零延迟体验</h3>
+        <p>唤起 &lt;100ms · 复制 &lt;50ms · 冻结画面 · 原生手感 · 无 Web 糊感</p>
+      </div>
+      <div class="summary-item">
+        <h3>✏️ 标注可编辑</h3>
+        <p>矩形、箭头、文字、马赛克等全部可拖拽二次编辑，不是画完就固定。</p>
+      </div>
+      <div class="summary-item">
+        <h3>📌 贴图置顶</h3>
+        <p>截图钉在屏幕上做参考，可拖动、可关闭，支持多贴图同时存在。</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

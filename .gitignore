@@ -1,0 +1,45 @@
+# ===== macOS =====
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# ===== Xcode =====
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcuserdatad/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.perspectivev3
+*.mode1v3
+*.mode2v3
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ===== Swift Package Manager =====
+.build/
+Packages/
+Package.pins
+Package.resolved
+.swiftpm/
+
+# ===== 打包产物 =====
+*.app/
+dist/
+
+# ===== 日志与临时文件 =====
+*.log
+*.tmp
+*.bak
+
+# 误操作产生的杂项文件（内容是一条 codesign 输出）
+:-
+
+# ===== TRAE 本地工作区（技能缓存等） =====
+.trae/
