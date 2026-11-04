@@ -42,7 +42,8 @@ enum TranscriptionAligner {
                 end: word.end,
                 text: word.text,
                 speakerName: word.speakerName,
-                speakerID: speakerID
+                speakerID: speakerID,
+                isEstimated: word.isEstimated
             )
         }
     }

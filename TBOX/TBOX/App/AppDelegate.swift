@@ -62,10 +62,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
             self?.prepareOverlayPanelsIfNeeded()
         }
-        // 首次启动时后台预下载语音模型（非阻塞：截图、录屏等功能不受影响，
-        // 下载完成后录音转写即可离线使用）。
+        // 语音模型体积较大（约 637 MB），启动时只检查状态，不在后台静默下载；
+        // 改由首次转写时经用户确认后下载，或在“设置 · 模型”手动触发。
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            ModelPreloader.shared.startIfNeeded()
+            ModelPreloader.shared.checkAtLaunch()
         }
     }
 
@@ -545,6 +545,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard recorder == nil, !(transcriptionManager?.isActive ?? false), !isCapturing else { return }
         closeOverlays()
 
+        // 首次使用且模型缺失时，先经体积确认再后台下载；下载与录音并行，不阻塞。
+        ModelPreloader.shared.prepareOnFirstUse()
+
         let manager = RecordingTranscriptionManager()
         configureTranscriptionManager(manager)
         manager.start()
@@ -584,6 +587,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         closeOverlays()
+        // 首次使用且模型缺失时，先经体积确认再后台下载。
+        ModelPreloader.shared.prepareOnFirstUse()
+
         let manager = RecordingTranscriptionManager()
         configureTranscriptionManager(manager)
         manager.transcribeSavedRecording(at: audioURL)

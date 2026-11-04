@@ -11,14 +11,25 @@ struct SettingsView: View {
     }
     @State private var page: Page = .status
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
+            // 固定侧栏：不使用 NavigationSplitView，避免其在普通 NSWindow 中
+            // 被自动折叠后无法恢复（曾导致切到“模型”页后无法切回）。
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) { Image(systemName: "camera.viewfinder").font(.system(size: 20)); VStack(alignment: .leading, spacing: 1) { Text("TBOX").font(.system(size: 14, weight: .semibold)); Text("截图与录屏工具").font(.system(size: 11)).foregroundStyle(.secondary) } }.padding(18)
                 Divider()
                 VStack(alignment: .leading, spacing: 2) { ForEach(Page.allCases) { item in Button { page = item } label: { HStack(spacing: 10) { Image(systemName: item.icon).frame(width: 18); Text(item.title); Spacer() }.font(.system(size: 13)).foregroundStyle(page == item ? Color.primary : Color.secondary).padding(.horizontal, 12).padding(.vertical, 8).background(page == item ? Color.black.opacity(0.07) : .clear) }.buttonStyle(.plain) } }.padding(.horizontal, 8).padding(.top, 12)
                 Spacer(); Text("本地客户端 · v0.1").font(.system(size: 10)).foregroundStyle(.tertiary).padding(18)
-            }.frame(minWidth: 190).background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
-        } detail: { Group { switch page { case .status: StatusPage(); case .shortcuts: ShortcutsPage(); case .records: RecordsPage(); case .models: ModelsPage(); case .account: AccountPage() } }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(Color(nsColor: .windowBackgroundColor)) }.navigationSplitViewStyle(.balanced).frame(minWidth: 860, minHeight: 560)
+            }
+            .frame(width: 200)
+            .background(Color(nsColor: .windowBackgroundColor).opacity(0.96))
+
+            Divider()
+
+            Group { switch page { case .status: StatusPage(); case .shortcuts: ShortcutsPage(); case .records: RecordsPage(); case .models: ModelsPage(); case .account: AccountPage() } }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(Color(nsColor: .windowBackgroundColor))
+        }
+        .frame(minWidth: 860, minHeight: 560)
     }
 }
 
@@ -267,6 +278,12 @@ private struct ModelsPage: View {
     @State private var refreshID = UUID()
     @AppStorage(RecordingTranscriptionPreferences.allowSystemSpeechFallbackKey)
     private var allowSystemSpeechFallback = false
+    @AppStorage(RecordingTranscriptionPreferences.autoDownloadModelsKey)
+    private var autoDownloadModels = true
+    @AppStorage(RecordingTranscriptionPreferences.archiveRecordingsKey)
+    private var archiveRecordings = true
+    @AppStorage(RecordingTranscriptionPreferences.captureSystemAudioKey)
+    private var captureSystemAudio = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -308,6 +325,13 @@ private struct ModelsPage: View {
                         NSWorkspace.shared.open(TBOXTranscriptionModel.storageDirectory)
                     }
                     .buttonStyle(.bordered)
+                    Button("下载语音模型（约 637 MB）") {
+                        guard ModelPreloader.confirmDownload() else { return }
+                        ModelPreloader.shared.startDownloadForUser()
+                        refreshID = UUID()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(ModelPreloader.shared.isReady)
                     Spacer()
                 }
             }
@@ -327,6 +351,25 @@ private struct ModelsPage: View {
                 title: "允许系统兼容识别",
                 detail: "仅在本地模型失败时使用；macOS 可能通过网络处理录音",
                 isOn: $allowSystemSpeechFallback
+            )
+
+            SectionTitle("录音输入")
+            ToggleRow(
+                title: "同时录制系统声音",
+                detail: "把会议对方、网页播放的声音与麦克风混为一路转写；需屏幕录制权限",
+                isOn: $captureSystemAudio
+            )
+
+            SectionTitle("本地存储")
+            ToggleRow(
+                title: "首次转写时下载语音模型",
+                detail: "关闭后需在本页手动下载；模型约 637 MB，仅需一次",
+                isOn: $autoDownloadModels
+            )
+            ToggleRow(
+                title: "转写完成后压缩归档录音",
+                detail: "把未压缩录音转为 AAC（.m4a），约省 85% 磁盘；失败会保留原文件",
+                isOn: $archiveRecordings
             )
 
             Text("首次转写需要联网下载模型；完成后可离线使用。模型由 Argmax WhisperKit 提供，固定为经过验证的稳定版本。")

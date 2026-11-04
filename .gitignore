@@ -43,3 +43,9 @@ dist/
 
 # ===== TRAE 本地工作区（技能缓存等） =====
 .trae/
+
+# ===== 误操作产生的 Xcode 模板目录 =====
+Product Name:/
+
+# ===== Claude 本地工作区 =====
+.claude/

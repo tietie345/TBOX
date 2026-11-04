@@ -7,8 +7,12 @@ import Cocoa
 @preconcurrency import SpeakerKit
 #endif
 
-/// 应用启动时检查语音模型是否就绪；未就绪则后台预下载，完成后录音转写即可离线使用。
-/// 下载期间截图、录屏、标注、OCR、翻译等功能不受影响。
+/// 语音模型（WhisperKit + SpeakerKit）的准备器。
+///
+/// 模型体积较大（合计约 637 MB），**不再在应用启动时静默下载**：
+/// 启动时只检查状态；首次真正使用转写时，经用户确认后再后台下载。
+/// 也可在“设置 · 模型”里手动触发下载。下载期间截图、录屏、标注、OCR、
+/// 翻译等功能不受影响。
 final class ModelPreloader: NSObject {
     static let shared = ModelPreloader()
 
@@ -17,6 +21,12 @@ final class ModelPreloader: NSObject {
     private var progressIndicator: NSProgressIndicator?
     private var downloadTask: Task<Void, Never>?
     private var isFinished = false
+    private var didPromptThisLaunch = false
+
+    /// 模型是否已全部就绪（可在任意线程读取）。
+    var isReady: Bool { allModelsInstalled }
+
+    private var isDownloading: Bool { downloadTask != nil && !isFinished }
 
     private var speakerModelDirectory: URL {
         TBOXTranscriptionModel.storageDirectory
@@ -50,12 +60,55 @@ final class ModelPreloader: NSObject {
         whisperModelInstalled && speakerModelInstalled
     }
 
-    /// 在应用启动后异步调用。模型已就绪时静默跳过；否则弹出进度窗口并后台下载。
-    func startIfNeeded() {
-        guard !allModelsInstalled else {
-            AppLog.recording("语音模型已就绪，无需预下载")
+    /// 启动时调用：只检查状态并记录日志，不做任何下载。
+    func checkAtLaunch() {
+        if allModelsInstalled {
+            AppLog.recording("语音模型已就绪，无需下载")
+        } else {
+            AppLog.recording("语音模型未安装，将在首次转写时经确认后下载")
+        }
+    }
+
+    /// 首次转写时调用：按用户设置决定是否提示下载，非阻塞。
+    /// 与既有实现一致，约定只在主线程调用（内部弹窗与 AppKit 操作均在主线程）。
+    func prepareOnFirstUse() {
+        guard !allModelsInstalled else { return }
+        let defaults = UserDefaults.standard
+        let autoDownload = defaults.object(forKey: RecordingTranscriptionPreferences.autoDownloadModelsKey) == nil
+            ? true
+            : defaults.bool(forKey: RecordingTranscriptionPreferences.autoDownloadModelsKey)
+        guard autoDownload else {
+            AppLog.recording("已关闭首次自动下载，需在设置 · 模型中手动下载语音模型")
             return
         }
+        guard !didPromptThisLaunch, !isDownloading else { return }
+        didPromptThisLaunch = true
+        AppLog.recording("提示用户下载语音模型")
+        if Self.confirmDownload() {
+            startDownload()
+        }
+    }
+
+    /// 设置页显式触发下载（体积确认由调用方负责）。
+    func startDownloadForUser() {
+        startDownload()
+    }
+
+    /// 体积确认弹窗。确认返回 true。
+    static func confirmDownload() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "首次使用需要下载语音识别模型"
+        alert.informativeText =
+            "模型合计约 637 MB（识别约 626 MB + 说话人识别约 11 MB），仅需下载一次。"
+            + "下载后录音完全在本机离线转写，不会上传。是否现在下载？"
+        alert.addButton(withTitle: "下载")
+        alert.addButton(withTitle: "稍后")
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func startDownload() {
+        guard !isDownloading, !allModelsInstalled else { return }
+        isFinished = false
         showProgressWindow()
         downloadTask = Task { [weak self] in
             await self?.downloadModels()

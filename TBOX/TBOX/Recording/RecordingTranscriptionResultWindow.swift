@@ -43,7 +43,7 @@ final class RecordingTranscriptionResultWindow: NSWindow {
         durationLabel.stringValue = "时长 \(Self.formatDuration(result.duration))"
         statusLabel.stringValue = result.text.isEmpty
             ? "未识别到文字内容"
-            : "\(result.engine.displayName)识别 · 已整理为 \(result.segments.count) 个句段，可直接编辑"
+            : Self.summary(for: result)
         currentText = result.text
         currentSegments = result.segments
         editedModeTexts.removeAll()
@@ -305,6 +305,13 @@ final class RecordingTranscriptionResultWindow: NSWindow {
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
+    /// 汇总状态行；句段出现估算时间时明确提示，避免用户把估算时间当作真实时间。
+    private static func summary(for result: RecordingTranscriptionResult) -> String {
+        let estimated = result.segments.contains(where: \.isEstimated)
+        let base = "\(result.engine.displayName)识别 · 已整理为 \(result.segments.count) 个句段，可直接编辑"
+        return estimated ? base + "（部分时间戳为估算值）" : base
+    }
+
     private static func formatTimestamp(_ timestamp: TimeInterval) -> String {
         let seconds = max(0, Int(timestamp.rounded(.down)))
         return String(format: "%02d:%02d", seconds / 60, seconds % 60)
@@ -324,9 +331,12 @@ final class RecordingTranscriptionResultWindow: NSWindow {
         bodyParagraph.paragraphSpacing = 18
 
         for segment in currentSegments {
+            let header = segment.isEstimated
+                ? "\(segment.speakerName)  ·  ~\(Self.formatTimestamp(segment.start))  ·  时间估算\n"
+                : "\(segment.speakerName)  ·  \(Self.formatTimestamp(segment.start))\n"
             transcript.append(
                 NSAttributedString(
-                    string: "\(segment.speakerName)  ·  \(Self.formatTimestamp(segment.start))\n",
+                    string: header,
                     attributes: [
                         .font: NSFont.systemFont(ofSize: 12, weight: .medium),
                         .foregroundColor: NSColor.secondaryLabelColor,

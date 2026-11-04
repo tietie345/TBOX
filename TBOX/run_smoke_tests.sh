@@ -29,6 +29,7 @@ swiftc \
   -framework AppKit \
   -framework AVFoundation \
   -framework Speech \
+  -framework ScreenCaptureKit \
   -o "$SEGMENTER_OUT" \
   "$PROJECT_DIR/TBOX/Support/Logger.swift" \
   "$PROJECT_DIR/TBOX/Recording/WhisperKitTranscriptionEngine.swift" \
@@ -36,6 +37,9 @@ swiftc \
   "$PROJECT_DIR/TBOX/Recording/TranscriptionAligner.swift" \
   "$PROJECT_DIR/TBOX/Recording/TranscriptPolisher.swift" \
   "$PROJECT_DIR/TBOX/Recording/RecordingTranscriptionManager.swift" \
+  "$PROJECT_DIR/TBOX/Recording/RecordingAudioArchiver.swift" \
+  "$PROJECT_DIR/TBOX/Recording/SystemAudioRecorder.swift" \
+  "$PROJECT_DIR/TBOX/Recording/AudioTrackMixer.swift" \
   "$PROJECT_DIR/Tests/TranscriptionSegmenterSmoke/main.swift"
 
 "$SEGMENTER_OUT"
@@ -49,6 +53,7 @@ swiftc \
   -framework AppKit \
   -framework AVFoundation \
   -framework Speech \
+  -framework ScreenCaptureKit \
   -o "$PERSISTENCE_OUT" \
   "$PROJECT_DIR/TBOX/Support/Logger.swift" \
   "$PROJECT_DIR/TBOX/Recording/WhisperKitTranscriptionEngine.swift" \
@@ -56,6 +61,9 @@ swiftc \
   "$PROJECT_DIR/TBOX/Recording/TranscriptionAligner.swift" \
   "$PROJECT_DIR/TBOX/Recording/TranscriptPolisher.swift" \
   "$PROJECT_DIR/TBOX/Recording/RecordingTranscriptionManager.swift" \
+  "$PROJECT_DIR/TBOX/Recording/RecordingAudioArchiver.swift" \
+  "$PROJECT_DIR/TBOX/Recording/SystemAudioRecorder.swift" \
+  "$PROJECT_DIR/TBOX/Recording/AudioTrackMixer.swift" \
   "$PROJECT_DIR/Tests/TranscriptPersistenceSmoke/main.swift"
 
 "$PERSISTENCE_OUT"
@@ -69,6 +77,7 @@ swiftc \
   -framework AppKit \
   -framework AVFoundation \
   -framework Speech \
+  -framework ScreenCaptureKit \
   -o "$SPEAKER_OUT" \
   "$PROJECT_DIR/TBOX/Support/Logger.swift" \
   "$PROJECT_DIR/TBOX/Recording/WhisperKitTranscriptionEngine.swift" \
@@ -76,6 +85,9 @@ swiftc \
   "$PROJECT_DIR/TBOX/Recording/TranscriptionAligner.swift" \
   "$PROJECT_DIR/TBOX/Recording/TranscriptPolisher.swift" \
   "$PROJECT_DIR/TBOX/Recording/RecordingTranscriptionManager.swift" \
+  "$PROJECT_DIR/TBOX/Recording/RecordingAudioArchiver.swift" \
+  "$PROJECT_DIR/TBOX/Recording/SystemAudioRecorder.swift" \
+  "$PROJECT_DIR/TBOX/Recording/AudioTrackMixer.swift" \
   "$PROJECT_DIR/Tests/SpeakerPipelineSmoke/main.swift"
 
 "$SPEAKER_OUT"
@@ -89,6 +101,7 @@ swiftc \
   -framework AppKit \
   -framework AVFoundation \
   -framework Speech \
+  -framework ScreenCaptureKit \
   -o "$RESULT_WINDOW_OUT" \
   "$PROJECT_DIR/TBOX/Support/Logger.swift" \
   "$PROJECT_DIR/TBOX/Recording/WhisperKitTranscriptionEngine.swift" \
@@ -96,10 +109,27 @@ swiftc \
   "$PROJECT_DIR/TBOX/Recording/TranscriptionAligner.swift" \
   "$PROJECT_DIR/TBOX/Recording/TranscriptPolisher.swift" \
   "$PROJECT_DIR/TBOX/Recording/RecordingTranscriptionManager.swift" \
+  "$PROJECT_DIR/TBOX/Recording/RecordingAudioArchiver.swift" \
+  "$PROJECT_DIR/TBOX/Recording/SystemAudioRecorder.swift" \
+  "$PROJECT_DIR/TBOX/Recording/AudioTrackMixer.swift" \
   "$PROJECT_DIR/TBOX/Recording/RecordingTranscriptionResultWindow.swift" \
   "$PROJECT_DIR/Tests/TranscriptionResultWindowSmoke/main.swift"
 
 "$RESULT_WINDOW_OUT"
+
+MIXER_OUT="${TMPDIR:-/tmp}/tbox_audio_track_mixer_smoke"
+swiftc \
+  -module-cache-path "$MODULE_CACHE" \
+  -warnings-as-errors \
+  -target "$ARCH-apple-macosx14.0" \
+  -sdk "$SDK" \
+  -framework AVFoundation \
+  -o "$MIXER_OUT" \
+  "$PROJECT_DIR/TBOX/Support/Logger.swift" \
+  "$PROJECT_DIR/TBOX/Recording/AudioTrackMixer.swift" \
+  "$PROJECT_DIR/Tests/AudioTrackMixerSmoke/main.swift"
+
+"$MIXER_OUT"
 
 TEXT_OUT="${TMPDIR:-/tmp}/tbox_text_recognition_smoke"
 swiftc \

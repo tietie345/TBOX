@@ -15,7 +15,7 @@ TBOX 是一个 macOS 截图、录屏和本地录音转写工具。应用面向 m
 可用一份本地录音执行与客户端同路径的端到端验收（首次会下载固定模型）：
 
 ```bash
-./.build/arm64-apple-macosx/release/TBOX --transcribe-file "/absolute/path/to/audio.m4a"
+./.build/arm64-apple-macosx/release/TBOX --transcribe-file "/absolute/path/to/audio.caf"
 ```
 
 该模式不启动界面、不请求系统权限、不上传录音；成功结果与客户端一样原子保存到录音相邻的转写缓存。
@@ -28,6 +28,7 @@ TBOX 是一个 macOS 截图、录屏和本地录音转写工具。应用面向 m
 - 下载后完全在本机通过 Core ML、Apple Neural Engine / GPU 运行；
 - 使用 VAD 按真实语音边界切分，不再固定按时间硬切；
 - 支持长录音增量读取、自动语言识别和词级时间戳；
+- 可选同时采集系统声音（会议对方、网页播放的声音），与麦克风混为一路转写；需屏幕录制权限，失败自动降级为仅麦克风；
 - 默认禁止上传；用户明确开启后，本地模型失败时才切换到 macOS Speech 兼容路径；
 - 结果会明确标注“本地高精度识别”或“系统兼容识别”。
 

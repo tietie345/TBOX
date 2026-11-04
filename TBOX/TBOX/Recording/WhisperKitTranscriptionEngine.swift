@@ -17,18 +17,24 @@ enum TBOXTranscriptionModel {
     }
 
     static var isInstalled: Bool {
+        installedModelFolder != nil
+    }
+
+    /// 已安装模型变体的本地目录；未安装返回 nil。
+    /// 加载时直接用这个路径做纯本地加载，避免为了“核对快照”而去联网。
+    static var installedModelFolder: URL? {
         guard let enumerator = FileManager.default.enumerator(
             at: storageDirectory,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
-        ) else { return false }
+        ) else { return nil }
 
         for case let url as URL in enumerator {
             if url.lastPathComponent.contains(modelName), hasRequiredModels(in: url) {
-                return true
+                return url
             }
         }
-        return false
+        return nil
     }
 
     private static func hasRequiredModels(in directory: URL) -> Bool {
@@ -347,23 +353,38 @@ private actor WhisperKitPipeline {
 
         let modelDirectory = TBOXTranscriptionModel.storageDirectory
         try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
-        onProgress(
-            RecordingTranscriptionProgress(
-                completedChunks: 0,
-                totalChunks: 0,
-                statusMessage: TBOXTranscriptionModel.isInstalled
-                    ? "正在加载本地高精度模型…"
-                    : "首次使用：正在下载高精度模型（\(TBOXTranscriptionModel.approximateDownloadSize)）…"
-            )
-        )
 
-        let progressRelay = DownloadProgressRelay()
-        let modelFolder = try await WhisperKit.download(
-            variant: TBOXTranscriptionModel.modelName,
-            downloadBase: modelDirectory,
-            useBackgroundSession: false
-        ) { progress in
-            progressRelay.report(progress, to: onProgress)
+        let modelFolder: URL
+        if let installedFolder = TBOXTranscriptionModel.installedModelFolder {
+            // 模型已安装：严格本地加载，不发起任何网络请求。
+            // 此前这里无条件调用 WhisperKit.download()，即使模型已就绪也要联网核对
+            // HuggingFace 快照；网络不可达（例如国内直连 huggingface.co）时会超时，
+            // 表现为“模型加载失败”。本地 tokenizer 已缓存于
+            // `<downloadBase>/models/openai/whisper-large-v3/`，无需联网。
+            onProgress(
+                RecordingTranscriptionProgress(
+                    completedChunks: 0,
+                    totalChunks: 0,
+                    statusMessage: "正在加载本地高精度模型…"
+                )
+            )
+            modelFolder = installedFolder
+        } else {
+            onProgress(
+                RecordingTranscriptionProgress(
+                    completedChunks: 0,
+                    totalChunks: 0,
+                    statusMessage: "首次使用：正在下载高精度模型（\(TBOXTranscriptionModel.approximateDownloadSize)）…"
+                )
+            )
+            let progressRelay = DownloadProgressRelay()
+            modelFolder = try await WhisperKit.download(
+                variant: TBOXTranscriptionModel.modelName,
+                downloadBase: modelDirectory,
+                useBackgroundSession: false
+            ) { progress in
+                progressRelay.report(progress, to: onProgress)
+            }
         }
 
         onProgress(

@@ -97,6 +97,7 @@ let legacySegment = try JSONDecoder().decode(
     RecordingTranscriptionSegment.self, from: Data(legacyJSON.utf8)
 )
 require(legacySegment.speakerName == "我" && legacySegment.speakerID == nil, "旧快照应可解码且 speakerID 为 nil")
+require(legacySegment.isEstimated == false, "旧快照缺少 isEstimated 字段时应默认非估算")
 
 let modernSegment = RecordingTranscriptionSegment(
     start: 0.5, end: 2.5, text: "新版本句段。", speakerName: "说话人 1", speakerID: 0
@@ -104,6 +105,13 @@ let modernSegment = RecordingTranscriptionSegment(
 let modernData = try JSONEncoder().encode(modernSegment)
 let roundTrip = try JSONDecoder().decode(RecordingTranscriptionSegment.self, from: modernData)
 require(roundTrip.speakerID == 0 && roundTrip.speakerName == "说话人 1", "新快照编解码应保留说话人")
+
+let estimatedSegment = RecordingTranscriptionSegment(
+    start: 3.0, end: 6.0, text: "估算句段。", speakerName: "我", isEstimated: true
+)
+let estimatedData = try JSONEncoder().encode(estimatedSegment)
+let estimatedRoundTrip = try JSONDecoder().decode(RecordingTranscriptionSegment.self, from: estimatedData)
+require(estimatedRoundTrip.isEstimated, "估算标记应能编解码往返")
 
 // MARK: - 导出格式化
 
@@ -121,5 +129,18 @@ require(plain == "[说话人 1] 00:01:02 第一句话。\n[说话人 2] 00:01:05
 let markdown = TranscriptFormatter.format(exportSegments, as: .markdown)
 require(markdown.contains("## 说话人 1") && markdown.contains("- 00:01:02 第一句话。"), "Markdown 格式异常：\n\(markdown)")
 require(markdown.contains("## 说话人 2"), "Markdown 说话人分组异常")
+
+// 估算时间戳：txt/md 用 `~` 前缀标记；同一批数据里真实时间戳不加前缀。
+let estimatedExport = [
+    RecordingTranscriptionSegment(start: 0, end: 3, text: "估算句。", speakerName: "我", isEstimated: true),
+    RecordingTranscriptionSegment(start: 3, end: 6, text: "真实句。", speakerName: "我"),
+]
+let estimatedPlain = TranscriptFormatter.format(estimatedExport, as: .plainText)
+require(
+    estimatedPlain == "[我] ~00:00:00 估算句。\n[我] 00:00:03 真实句。",
+    "估算时间戳的纯文本标记异常：\n\(estimatedPlain)"
+)
+let estimatedMarkdown = TranscriptFormatter.format(estimatedExport, as: .markdown)
+require(estimatedMarkdown.contains("- ~00:00:00 估算句。"), "Markdown 估算时间戳标记异常：\n\(estimatedMarkdown)")
 
 print("Speaker pipeline smoke tests passed")

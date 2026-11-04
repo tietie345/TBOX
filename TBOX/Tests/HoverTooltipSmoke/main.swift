@@ -25,8 +25,8 @@ toolbar.layoutButtons()
 
 let buttons = toolbar.subviews.compactMap { $0 as? HoverTrackingButton }
 let expectedTexts = [
-    "标注", "画笔", "文字", "录制选区", "录音转写", "提取框选区域文字",
-    "翻译框选区域文字", "贴图", "保存", "复制", "取消",
+    "矩形标注", "箭头标注", "画笔", "文字", "录制选区", "录音转写",
+    "提取框选区域文字", "翻译框选区域文字", "贴图", "保存", "复制", "取消",
 ]
 guard buttons.count == expectedTexts.count else {
     fatalError("功能按钮数量异常: \(buttons.count)")

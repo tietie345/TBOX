@@ -32,6 +32,7 @@ require(grouped[0].text == "马路上有一根钢轨，到底怎么不跑偏的�
 require(grouped[1].text == "这种情况", "长停顿没有断句")
 require(grouped[2].text == "很常见。", "末尾句段异常")
 require(grouped[1].start == 4.2, "句段时间戳没有保留")
+require(grouped.allSatisfy { !$0.isEstimated }, "真实词级对齐结果不应标记为估算时间")
 
 let english = RecordingTranscriptionSegmenter.group(
     [
@@ -49,5 +50,6 @@ let fallback = RecordingTranscriptionSegmenter.group(
     duration: 9
 )
 require(fallback.map(\.text) == ["第一句。", "第二句！", "最后一句"], "无时间片段时应按标点回退分句")
+require(fallback.allSatisfy(\.isEstimated), "按字符比例回退分句的时间戳必须标记为估算值")
 
 print("Transcription segmenter smoke tests passed")

@@ -48,6 +48,10 @@ enum RecordingTranscriptionEngine: String, Codable {
 
 enum RecordingTranscriptionPreferences {
     static let allowSystemSpeechFallbackKey = "allowSystemSpeechFallback"
+    /// 转写完成后是否把未压缩录音归档为 AAC；缺省视为开启。
+    static let archiveRecordingsKey = "archiveRecordingsAfterTranscription"
+    /// 首次转写时是否自动下载语音模型（经体积确认后）；缺省视为开启。
+    static let autoDownloadModelsKey = "autoDownloadModelsOnFirstUse"
 }
 
 struct RecordingTranscriptionResult: Codable {
@@ -62,7 +66,9 @@ struct RecordingTranscriptionResult: Codable {
         duration: TimeInterval,
         text: String,
         segments: [RecordingTranscriptionSegment],
-        engine: RecordingTranscriptionEngine = .appleSpeech
+        // 默认按本地高精度引擎记录：绝大多数结果出自 WhisperKit，
+        // 只应在系统兼容路径上显式传入 .appleSpeech，避免漏传时被错误标注来源。
+        engine: RecordingTranscriptionEngine = .whisperKit
     ) {
         self.audioURL = audioURL
         self.duration = duration
@@ -79,23 +85,29 @@ struct RecordingTranscriptionSegment: Codable {
     let speakerName: String
     /// 说话人分离引擎给出的说话人编号；nil 表示未标注（独白或分离不可用）。
     var speakerID: Int?
+    /// 时间戳是否为估算值。词级对齐可用时为 false（真实时间）；当管线回退到
+    /// 按字符比例均摊时间时置为 true，供界面与导出明确区分，
+    /// 避免把估算时间当作真实时间使用。
+    let isEstimated: Bool
 
     init(
         start: TimeInterval,
         end: TimeInterval,
         text: String,
         speakerName: String,
-        speakerID: Int? = nil
+        speakerID: Int? = nil,
+        isEstimated: Bool = false
     ) {
         self.start = start
         self.end = end
         self.text = text
         self.speakerName = speakerName
         self.speakerID = speakerID
+        self.isEstimated = isEstimated
     }
 
     private enum CodingKeys: String, CodingKey {
-        case start, end, text, speakerName, speakerID
+        case start, end, text, speakerName, speakerID, isEstimated
     }
 
     init(from decoder: Decoder) throws {
@@ -104,8 +116,10 @@ struct RecordingTranscriptionSegment: Codable {
         end = try container.decode(TimeInterval.self, forKey: .end)
         text = try container.decode(String.self, forKey: .text)
         speakerName = try container.decode(String.self, forKey: .speakerName)
-        // 旧版快照没有 speakerID 字段；缺失时按未标注处理，保证旧缓存可读。
+        // 旧版快照没有 speakerID / isEstimated 字段；缺失时按未标注、
+        // 非估算处理，保证旧缓存可读。
         speakerID = try container.decodeIfPresent(Int.self, forKey: .speakerID)
+        isEstimated = try container.decodeIfPresent(Bool.self, forKey: .isEstimated) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -115,6 +129,7 @@ struct RecordingTranscriptionSegment: Codable {
         try container.encode(text, forKey: .text)
         try container.encode(speakerName, forKey: .speakerName)
         try container.encodeIfPresent(speakerID, forKey: .speakerID)
+        try container.encode(isEstimated, forKey: .isEstimated)
     }
 }
 
@@ -239,7 +254,8 @@ enum RecordingTranscriptionSegmenter {
                     end: max(existing.end, item.end),
                     text: joined(existing.text, token),
                     speakerName: existing.speakerName,
-                    speakerID: existing.speakerID
+                    speakerID: existing.speakerID,
+                    isEstimated: existing.isEstimated || item.isEstimated
                 )
             } else {
                 current = RecordingTranscriptionSegment(
@@ -247,7 +263,8 @@ enum RecordingTranscriptionSegmenter {
                     end: item.end,
                     text: token,
                     speakerName: item.speakerName,
-                    speakerID: item.speakerID
+                    speakerID: item.speakerID,
+                    isEstimated: item.isEstimated
                 )
             }
 
@@ -278,7 +295,8 @@ enum RecordingTranscriptionSegmenter {
                     end: segment.end,
                     text: cleaned,
                     speakerName: segment.speakerName,
-                    speakerID: segment.speakerID
+                    speakerID: segment.speakerID,
+                    isEstimated: segment.isEstimated
                 )
             )
         }
@@ -313,7 +331,9 @@ enum RecordingTranscriptionSegmenter {
                 start: start,
                 end: end,
                 text: sentence,
-                speakerName: "我"
+                speakerName: "我",
+                // 无词级时间可用时按字符比例均摊，属于估算时间，必须显式标记。
+                isEstimated: true
             )
         }
     }
@@ -402,6 +422,13 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
     private var startedAt: Date?
     private var pausedDuration: TimeInterval = 0
     private var pausedAt: Date?
+    /// 系统声音采集器；仅在启用且权限可用时存在，失败即置空降级为仅麦克风。
+    private var systemAudioRecorder: SystemAudioRecorder?
+    /// 录音过程中每个暂停区间在麦克风有效录音时间轴上的位置与时长，
+    /// 混音时据此跳过暂停期间的系统声音。
+    private var pauseGaps: [AudioTrackMixer.PauseGap] = []
+    /// 当前暂停开始时在麦克风有效录音时间轴上的位置（未恢复前有效）。
+    private var activePauseStartedAt: TimeInterval?
     private var speechRecognizer: SFSpeechRecognizer?
     private var speechTask: SFSpeechRecognitionTask?
     private var highQualityTask: Task<Void, Never>?
@@ -475,13 +502,22 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
         case .recording:
             recorder.pause()
             pausedAt = Date()
+            let activeElapsed = Date().timeIntervalSince(startedAt ?? Date()) - pausedDuration
+            activePauseStartedAt = max(0, activeElapsed)
             state = .paused
             publishState()
         case .paused:
             if let pausedAt {
-                pausedDuration += Date().timeIntervalSince(pausedAt)
+                let pauseDuration = Date().timeIntervalSince(pausedAt)
+                if let activeStart = activePauseStartedAt {
+                    pauseGaps.append(
+                        AudioTrackMixer.PauseGap(activeTime: activeStart, duration: pauseDuration)
+                    )
+                }
+                pausedDuration += pauseDuration
             }
             self.pausedAt = nil
+            activePauseStartedAt = nil
             recorder.record()
             state = .recording
             publishState()
@@ -496,10 +532,12 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
             pausedDuration += Date().timeIntervalSince(pausedAt)
             self.pausedAt = nil
         }
+        activePauseStartedAt = nil
         recorder?.stop()
         stopTimers()
 
         guard let recorder, let url = audioURL else {
+            teardownSystemAudio()
             finish(.failure(RecordingTranscriptionError.noAudio))
             return
         }
@@ -514,9 +552,13 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
         let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
         AppLog.recording("录音文件已关闭: path=\(url.path), size=\(fileSize) bytes, duration=\(String(format: "%.2f", finalDuration))s, \(Self.audioFileSummary(url))")
         guard FileManager.default.fileExists(atPath: url.path), fileSize > 0 else {
+            teardownSystemAudio()
             finish(.failure(RecordingTranscriptionError.noAudio))
             return
         }
+
+        let gaps = pauseGaps
+        pauseGaps = []
 
         // AVAudioRecorder may still be finalising the m4a container immediately
         // after stop().  Give the file system one run-loop turn before handing
@@ -527,12 +569,68 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
             let frameCount = (try? AVAudioFile(forReading: url).length) ?? 0
             guard frameCount > 0 else {
                 AppLog.recordingError("录音文件没有有效音频帧: path=\(url.path), size=\(fileSize)")
+                self.teardownSystemAudio()
                 self.finish(.failure(RecordingTranscriptionError.noAudio))
                 return
             }
-            NotificationCenter.default.post(name: .tboxRecordingSaved, object: url)
-            self.transcribe(url: url, duration: finalDuration)
+            self.finalizeInput(microphoneURL: url, pauseGaps: gaps, duration: finalDuration)
         }
+    }
+
+    /// 收尾系统声音采集并把麦克风与系统声音混为最终转写源，再开始转写。
+    /// 系统声音不可用或混音失败时直接使用麦克风原文件，不阻断主流程。
+    private func finalizeInput(
+        microphoneURL: URL,
+        pauseGaps: [AudioTrackMixer.PauseGap],
+        duration: TimeInterval
+    ) {
+        stopSystemAudio { [weak self] systemURL in
+            guard let self else { return }
+            var finalURL = microphoneURL
+            if let systemURL {
+                let outputURL = Self.mixedAudioURL(basedOn: microphoneURL)
+                if let mixed = AudioTrackMixer.mix(
+                    microphoneURL: microphoneURL,
+                    systemAudioURL: systemURL,
+                    pauseGaps: pauseGaps,
+                    outputURL: outputURL
+                ) {
+                    finalURL = mixed
+                    try? FileManager.default.removeItem(at: microphoneURL)
+                }
+                try? FileManager.default.removeItem(at: systemURL)
+            }
+            self.audioURL = finalURL
+            NotificationCenter.default.post(name: .tboxRecordingSaved, object: finalURL)
+            self.transcribe(url: finalURL, duration: duration)
+        }
+    }
+
+    /// 停止系统声音采集并交出临时文件地址；未启用时立即回调 nil。
+    private func stopSystemAudio(_ completion: @escaping (URL?) -> Void) {
+        guard let recorder = systemAudioRecorder else {
+            completion(nil)
+            return
+        }
+        systemAudioRecorder = nil
+        recorder.stop { url in
+            DispatchQueue.main.async { completion(url) }
+        }
+    }
+
+    /// 放弃系统声音采集（启动失败或空录音清理），并删除其临时文件。
+    private func teardownSystemAudio() {
+        guard let recorder = systemAudioRecorder else { return }
+        systemAudioRecorder = nil
+        recorder.stop { url in
+            if let url { try? FileManager.default.removeItem(at: url) }
+        }
+    }
+
+    private static func mixedAudioURL(basedOn microphoneURL: URL) -> URL {
+        let directory = microphoneURL.deletingLastPathComponent()
+        let base = microphoneURL.deletingPathExtension().lastPathComponent
+        return directory.appendingPathComponent("\(base)_双轨.caf")
     }
 
     private func prepareAndRecord() {
@@ -565,13 +663,36 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
             self.audioURL = url
             self.startedAt = Date()
             self.pausedDuration = 0
+            self.pausedAt = nil
+            self.activePauseStartedAt = nil
+            self.pauseGaps = []
             self.elapsed = 0
             self.lastMeterLogDate = .distantPast
             state = .recording
             publishState()
             startTimers()
+            startSystemAudioCaptureIfNeeded()
         } catch {
             failStart(RecordingTranscriptionError.recorderSetup(error.localizedDescription))
+        }
+    }
+
+    /// 在麦克风轨已启动的前提下并行启动系统声音采集；任何失败都降级为仅麦克风。
+    private func startSystemAudioCaptureIfNeeded() {
+        guard SystemAudioRecorder.isEnabled else {
+            AppLog.recording("系统声音采集已关闭（设置中未启用），本次仅录制麦克风")
+            return
+        }
+        let recorder = SystemAudioRecorder()
+        systemAudioRecorder = recorder
+        recorder.start { [weak self] error in
+            guard let self else { return }
+            if let error {
+                AppLog.recordingError("系统声音采集未启动，本次仅录制麦克风: \(error.localizedDescription)")
+                self.systemAudioRecorder = nil
+            } else {
+                AppLog.recording("系统声音采集已启动（会议对方声音将一并记录并转写）")
+            }
         }
     }
 
@@ -607,17 +728,21 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
                 let recognized = try await recognizedTask
                 let speakerTurns = await speakerTurnsTask
 
+                let output = Self.assembleTranscript(
+                    recognized: recognized,
+                    speakerTurns: speakerTurns,
+                    url: url,
+                    duration: duration
+                )
+                // 转写完成后归档未压缩录音（.caf → .m4a）；失败则保持原文件，不影响结果交付。
+                let archived = await RecordingAudioArchiver.archiveIfNeeded(output)
+
                 await MainActor.run {
                     guard self.state == .transcribing else { return }
-                    let output = Self.assembleTranscript(
-                        recognized: recognized,
-                        speakerTurns: speakerTurns,
-                        url: url,
-                        duration: duration
-                    )
                     do {
-                        try RecordingTranscriptStore.save(output, completedChunks: 1, isComplete: true)
-                        self.latestPartialResult = output
+                        try RecordingTranscriptStore.save(archived, completedChunks: 1, isComplete: true)
+                        self.audioURL = archived.audioURL
+                        self.latestPartialResult = archived
                         self.progress = RecordingTranscriptionProgress(
                             completedChunks: 1,
                             totalChunks: 1,
@@ -625,9 +750,9 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
                         )
                         self.onProgress?(self.progress)
                         AppLog.recording(
-                            "本地高精度转写完成: language=\(recognized.language), chars=\(output.text.count), segments=\(output.segments.count), speakers=\(Self.distinctSpeakerCount(output.segments))"
+                            "本地高精度转写完成: language=\(recognized.language), chars=\(archived.text.count), segments=\(archived.segments.count), speakers=\(Self.distinctSpeakerCount(archived.segments))"
                         )
-                        self.finish(.success(output))
+                        self.finish(.success(archived))
                     } catch {
                         self.finish(.failure(RecordingTranscriptionError.transcriptionFailed(
                             "保存高精度转写结果失败：\(error.localizedDescription)"
@@ -733,7 +858,8 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
                 end: segment.end,
                 text: segment.text,
                 speakerName: label,
-                speakerID: speakerCount >= 2 ? segment.speakerID : nil
+                speakerID: speakerCount >= 2 ? segment.speakerID : nil,
+                isEstimated: segment.isEstimated
             )
         }
     }
@@ -1094,7 +1220,18 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
             return
         }
         AppLog.recording("语音识别完成: chunks=\(recognitionChunks.count), chars=\(fullText.count), segments=\(segments.count)")
-        finish(.success(output))
+
+        // 归档未压缩录音后再交付结果；失败保持原文件。归档期间若会话已被取消则放弃交付。
+        let generation = recognitionGeneration
+        Task { [weak self] in
+            guard let self else { return }
+            let archived = await RecordingAudioArchiver.archiveIfNeeded(output)
+            await MainActor.run {
+                guard self.recognitionGeneration == generation else { return }
+                self.audioURL = archived.audioURL
+                self.finish(.success(archived))
+            }
+        }
     }
 
     private func startTimers() {
@@ -1131,6 +1268,9 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
 
     private func failStart(_ error: Error) {
         stopTimers()
+        teardownSystemAudio()
+        pauseGaps = []
+        activePauseStartedAt = nil
         recorder?.stop()
         recorder = nil
         state = .idle
@@ -1148,6 +1288,9 @@ final class RecordingTranscriptionManager: NSObject, @unchecked Sendable {
         speechTask = nil
         speechRecognizer = nil
         cleanupRecognitionTemporaryFiles()
+        teardownSystemAudio()
+        pauseGaps = []
+        activePauseStartedAt = nil
         state = .idle
         publishState()
         DispatchQueue.main.async { [weak self] in

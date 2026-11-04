@@ -38,7 +38,8 @@ enum TranscriptPolisher {
             end: segment.end,
             text: cleaned,
             speakerName: segment.speakerName,
-            speakerID: segment.speakerID
+            speakerID: segment.speakerID,
+            isEstimated: segment.isEstimated
         )
     }
 
@@ -53,6 +54,10 @@ enum TranscriptPolisher {
 }
 
 /// 转写结果的导出格式化。输出纯文本，便于结果窗口的保存面板直接写文件。
+///
+/// 时间戳可能来自真实词级对齐，也可能在降级路径上按字符比例估算
+/// （`isEstimated == true`）。文本与 Markdown 用 `~` 前缀标记估算时间；
+/// SRT 受字幕格式约束保留纯数字时间，估算信息通过结果窗口与本文档说明。
 enum TranscriptFormatter {
     enum Format: String, CaseIterable {
         case plainText = "txt"
@@ -79,10 +84,10 @@ enum TranscriptFormatter {
         }
     }
 
-    /// `[说话人] 00:12 文本` 逐句布局，时间戳支持小时。
+    /// `[说话人] 00:12 文本` 逐句布局，时间戳支持小时；估算时间加 `~` 前缀。
     private static func plain(_ segments: [RecordingTranscriptionSegment]) -> String {
         segments.map { segment in
-            "[\(segment.speakerName)] \(timestamp(segment.start, allowHours: true)) \(segment.text)"
+            "[\(segment.speakerName)] \(timestamp(segment.start, allowHours: true, estimated: segment.isEstimated)) \(segment.text)"
         }
         .joined(separator: "\n")
     }
@@ -102,17 +107,20 @@ enum TranscriptFormatter {
                 lines.append("## \(segment.speakerName)")
                 previousSpeaker = segment.speakerName
             }
-            lines.append("- \(timestamp(segment.start, allowHours: true)) \(segment.text)")
+            lines.append("- \(timestamp(segment.start, allowHours: true, estimated: segment.isEstimated)) \(segment.text)")
         }
         return lines.joined(separator: "\n")
     }
 
-    private static func timestamp(_ time: TimeInterval, allowHours: Bool) -> String {
+    private static func timestamp(_ time: TimeInterval, allowHours: Bool, estimated: Bool = false) -> String {
         let seconds = max(0, Int(time.rounded(.down)))
+        let base: String
         if allowHours || seconds >= 3600 {
-            return String(format: "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60)
+            base = String(format: "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60)
+        } else {
+            base = String(format: "%02d:%02d", seconds / 60, seconds % 60)
         }
-        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+        return estimated ? "~" + base : base
     }
 
     private static func srtTime(_ time: TimeInterval) -> String {
